@@ -103,6 +103,7 @@ int UnicornEngineARM::munmap(uintptr_t addr, size_t length)
     m_translator.erase(addr, aligned_length);
     m_scheduler.munmap(addr, aligned_length);
     m_allocator.free(ptr);
+    return 0;
 }
 
 ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Unicorn::start(uint32_t from, uint32_t until)
