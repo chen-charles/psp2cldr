@@ -1,0 +1,62 @@
+name: build
+
+on: [push, pull_request]
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  emulation:
+    runs-on: ubuntu-latest
+    container: fedora:latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Check Updates
+      run: dnf check-update
+      continue-on-error: true
+
+    - name: Install Dependencies
+      run: dnf install -y spdlog-devel unicorn-devel cmake gcc gcc-c++
+
+    - name: Create Build Environment
+      shell: bash
+      run: cmake -E make_directory ${GITHUB_WORKSPACE}/build
+
+    - name: Configure CMake
+      shell: bash
+      run: cmake -S ${GITHUB_WORKSPACE} -B ${GITHUB_WORKSPACE}/build -DCMAKE_BUILD_TYPE=$BUILD_TYPE
+
+    - name: Build
+      shell: bash
+      run: cmake --build ${GITHUB_WORKSPACE}/build --config $BUILD_TYPE
+
+  native:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Check Updates
+      run: sudo apt update
+
+    - name: Install Dependencies
+      run: sudo apt install gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf cmake git
+
+    - name: Install spdlog
+      shell: bash
+      run: git clone https://github.com/gabime/spdlog && cd spdlog && mkdir build && cd build && cmake -DCMAKE_C_COMPILER=/usr/bin/arm-linux-gnueabihf-gcc -DCMAKE_CXX_COMPILER=/usr/bin/arm-linux-gnueabihf-g++ -DCMAKE_PREFIX_PATH=/usr/arm-linux-gnueabihf -DCMAKE_INSTALL_PREFIX=/usr/arm-linux-gnueabihf .. && make && sudo make install
+
+    - name: Create Build Environment
+      shell: bash
+      run: mkdir -p ${GITHUB_WORKSPACE}/build
+
+    - name: Configure CMake
+      shell: bash
+      working-directory: ${{github.workspace}}/build
+      run: cmake -DCMAKE_C_COMPILER=/usr/bin/arm-linux-gnueabihf-gcc -DCMAKE_CXX_COMPILER=/usr/bin/arm-linux-gnueabihf-g++ -DCMAKE_PREFIX_PATH=/usr/arm-linux-gnueabihf -DCMAKE_INSTALL_PREFIX=/usr/arm-linux-gnueabihf $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=$BUILD_TYPE
+
+    - name: Build
+      working-directory: ${{github.workspace}}/build
+      shell: bash
+      run: make
