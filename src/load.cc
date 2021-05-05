@@ -175,7 +175,7 @@ int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinato
     LOG(DEBUG, "preparing execution environment for module_start");
     auto thread = coordinator.thread_create();
 
-    thread->register_interrupt_callback(
+    coordinator.register_interrupt_callback(
         [&ctx](ExecutionCoordinator &coord, ExecutionThread &thread, uint32_t intno) {
             InterruptContext intr_ctx(coord, thread, ctx);
             auto pc = thread[RegisterAccessProxy::Register::PC]->r();
@@ -352,7 +352,7 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
         LOG(DEBUG, "preparing execution environment for init");
         auto thread = coordinator.thread_create();
 
-        thread->register_interrupt_callback(
+        coordinator.register_interrupt_callback(
             [&ctx](ExecutionCoordinator &coord, ExecutionThread &thread, uint32_t intno) {
                 InterruptContext intr_ctx(coord, thread, ctx);
                 auto pc = thread[RegisterAccessProxy::Register::PC]->r();
