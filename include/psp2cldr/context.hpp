@@ -3,6 +3,8 @@
 
 #include <functional>
 #include <memory>
+#include <mutex>
+#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -165,7 +167,7 @@ public:
 
 public:
     /* loader context */
-
+    std::shared_mutex unimplemented_targets_mutex;
     std::unordered_map<uint32_t, import_stub_entry> unimplemented_targets; // unresolved import location, import_stub_entry
 
     /* VELF specific */

@@ -32,6 +32,8 @@ static void install_nid_stub(LoadContext &ctx, MemoryAccessProxy &proxy, uint32_
     stub.libraryNID = libraryNID;
     stub.functionNID = functionNID;
     stub.func = stub_func;
+
+    std::unique_lock guard(ctx.unimplemented_targets_mutex);
     ctx.unimplemented_targets[ptr_f] = stub;
 }
 
@@ -182,9 +184,19 @@ int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinato
                 if (thread[RegisterAccessProxy::Register::CPSR]->r() & (1 << 5))
                     pc |= 1;
 
-                if (ctx.unimplemented_targets.count(pc) != 0)
+                bool entry_exists = false;
+                import_stub_entry entry;
                 {
-                    auto entry = ctx.unimplemented_targets.at(pc);
+                    std::shared_lock guard(ctx.unimplemented_targets_mutex);
+                    if (ctx.unimplemented_targets.count(pc) != 0)
+                    {
+                        entry_exists = true;
+                        entry = ctx.unimplemented_targets.at(pc);
+                    }
+                }
+
+                if (entry_exists)
+                {
                     LOG(TRACE, "handler: {}", entry.repr());
                     auto handler_result = entry.call(&intr_ctx);
                     LOG(TRACE, "handler exit: {}", entry.repr());
@@ -258,7 +270,11 @@ static void install_sym_stub(LoadContext &ctx, ExecutionCoordinator &coordinator
     stub.sym = sym;
     stub.func = stub_func;
 
-    ctx.unimplemented_targets[handler_stub_loc] = stub;
+    {
+        std::unique_lock guard(ctx.unimplemented_targets_mutex);
+        ctx.unimplemented_targets[handler_stub_loc] = stub;
+    }
+
     proxy.w<uint32_t>(ptr_f, handler_stub_loc);
     handler_stub_loc += sizeof(INSTR_UND0_BXLR_ARM) - 1;
 }
@@ -344,10 +360,19 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
                 {
                     if (thread[RegisterAccessProxy::Register::CPSR]->r() & (1 << 5))
                         pc |= 1;
-
-                    if (ctx.unimplemented_targets.count(pc) != 0)
+                    bool entry_exists = false;
+                    import_stub_entry entry;
                     {
-                        auto entry = ctx.unimplemented_targets.at(pc);
+                        std::shared_lock guard(ctx.unimplemented_targets_mutex);
+                        if (ctx.unimplemented_targets.count(pc) != 0)
+                        {
+                            entry_exists = true;
+                            entry = ctx.unimplemented_targets.at(pc);
+                        }
+                    }
+
+                    if (entry_exists)
+                    {
                         LOG(TRACE, "handler: {}", entry.repr());
                         auto handler_result = entry.call(&intr_ctx);
                         LOG(TRACE, "handler exit: {}", entry.repr());
@@ -355,6 +380,7 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
                             return;
                         else
                         {
+                            LOG(CRITICAL, "handler {} returned {:#010x} != 0, die ...", entry.repr(), handler_result->result());
                             coord.panic(1, &intr_ctx);
                         }
                     }

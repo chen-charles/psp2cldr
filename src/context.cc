@@ -58,10 +58,11 @@ static std::shared_ptr<HandlerContinuation> _handler_call_target_function_impl(u
     // since we released continuation_mutex, another thread might be accessing all the static variables
     // we need a volatile stub_loc locally to make sure we are storing the correct stub location
 
-    // TODO: this should be protected by its own mutex
     uint32_t stub_loc_dq = stub_loc;
-    ctx->load.unimplemented_targets[stub_loc_dq] = stub;
-
+    {
+        std::unique_lock guard(ctx->load.unimplemented_targets_mutex);
+        ctx->load.unimplemented_targets[stub_loc_dq] = stub;
+    }
     return out;
 }
 
@@ -123,6 +124,7 @@ std::shared_ptr<HandlerResult> InterruptContext::install_forward_handler(std::st
 
         thread[RegisterAccessProxy::Register::PC]->w(loc);
 
+        std::unique_lock guard(load.unimplemented_targets_mutex);
         if (load.unimplemented_targets.count(pc | (isThumb ? 1 : 0)) == 0)
             // flagging a re-entry for a one-time handler installer, likely a corruption somewhere
             return std::make_shared<HandlerResult>(2);
