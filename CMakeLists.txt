@@ -8,7 +8,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_ENABLE_EXPORTS ON)
 
 project(psp2cldr)
-option (BUILD_SAMPLES "build sample implementations" OFF)
+option (BUILD_SAMPLES "build sample implementations" ON)
 
 add_executable(psp2cldr
     src/psp2cldr.cc src/load.cc src/provider.cc src/panic.cc src/context.cc src/memory_managers.cc

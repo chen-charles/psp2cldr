@@ -1,6 +1,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <iostream>
+#include <mutex>
 #include <sstream>
 
 #include <psp2cldr/imp_provider.hpp>
@@ -136,4 +137,35 @@ DEFINE_VITA_IMP_SYM_EXPORT(_open)
     ctx->thread[RegisterAccessProxy::Register::R0]->w(-1);
     ctx->thread[RegisterAccessProxy::Register::PC]->w(ctx->thread[RegisterAccessProxy::Register::LR]->r());
     return std::make_shared<HandlerResult>(0);
+}
+
+#undef basic_test_variable
+DEFINE_VITA_IMP_SYM_EXPORT(basic_test_variable)
+{
+    DECLARE_VITA_IMP_TYPE(VARIABLE);
+
+    static std::mutex _mutex;
+    std::lock_guard guard(_mutex);
+
+    static uint32_t _p_data = 0;
+
+    uint32_t p_var = ctx->thread[RegisterAccessProxy::Register::PC]->r();
+
+    if (_p_data == 0)
+    {
+        return ctx->handler_call_target_function("malloc", 4)->then([&, p_var](uint32_t result, InterruptContext *ctx) {
+            ctx->coord.proxy().w<uint32_t>(result, 42);
+            ctx->coord.proxy().w<uint32_t>(p_var, result);
+            std::lock_guard guard(_mutex);
+            _p_data = result;
+            TARGET_RETURN(0);
+            HANDLER_RETURN(0);
+        });
+    }
+    else
+    {
+        ctx->coord.proxy().w<uint32_t>(p_var, _p_data);
+        TARGET_RETURN(0);
+        HANDLER_RETURN(0);
+    }
 }
