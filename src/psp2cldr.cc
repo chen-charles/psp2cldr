@@ -85,11 +85,11 @@ order of supplying <nid_implementation_libraries> matters, the first observance 
         {
             for (auto &ent : exp.second)
             {
-                console->info("{:#010x}\t{:#010x}\t{:#010x}", exp.first, ent.first, ent.second);
+                console->info("{:#010x}\t{:#010x}\t{:#010x}", exp.first, ent.first, ent.second.second);
             }
         }
 
-        console->info("Import(s) (fmt: [libraryNID] [itemNID] [stubLocation])");
+        console->info("Import(s) (fmt: [libraryNID] [itemNID] [ptr_f])");
         for (auto &imp : velf.get_imports())
         {
             for (auto &ent : imp.second)

@@ -71,7 +71,9 @@ std::shared_ptr<HandlerContinuation> InterruptContext::handler_call_target_funct
 {
     if (load.nids_export_locations.count(nid_hash) == 0)
         throw std::logic_error("attempted to call an unregistered target function");
-    return _handler_call_target_function_impl(load.nids_export_locations[nid_hash], this);
+    if (load.nids_export_locations[nid_hash].first)
+        throw std::logic_error("attempted to call a variable");
+    return _handler_call_target_function_impl(load.nids_export_locations[nid_hash].second, this);
 }
 
 std::shared_ptr<HandlerContinuation> InterruptContext::handler_call_target_function_impl(std::string name)

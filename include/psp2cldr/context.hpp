@@ -158,14 +158,15 @@ public:
     std::vector<std::string> search_paths;
 
     std::unordered_map<NID_t, std::string> nid_to_filename;
+
 public:
     /* loader context */
     std::shared_mutex unimplemented_targets_mutex;
     std::unordered_map<uint32_t, import_stub_entry> unimplemented_targets; // unresolved import location, import_stub_entry
 
     /* VELF specific */
-    std::unordered_map<NID_t, std::unordered_set<NID_t>> nids_loaded; // moduleNID, [funcNID, ...]
-    std::unordered_map<NIDHASH_t, uint32_t> nids_export_locations;    // (moduleNID, funcNID), actual loaded location
+    std::unordered_map<NID_t, std::unordered_set<NID_t>> nids_loaded;               // moduleNID, [funcNID, ...]
+    std::unordered_map<NIDHASH_t, std::pair<bool, uint32_t>> nids_export_locations; // (moduleNID, funcNID), <isVariable, actual loaded location>
 
     /* ELF specific */
     std::unordered_set<std::string> libs_loaded;

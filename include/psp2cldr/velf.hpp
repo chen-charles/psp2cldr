@@ -336,23 +336,24 @@ public:
         return out;
     }
 
-    // pair<LIBRARY_NID, {<OBJECT_NID, stub_offset>}>
-    std::vector<std::pair<uint32_t, std::vector<std::pair<uint32_t, uint32_t>>>> get_exports() const
+    // pair<LIBRARY_NID, {<OBJECT_NID, <is_variable?, stub_offset>>}>
+    std::vector<std::pair<uint32_t, std::vector<std::pair<uint32_t, std::pair<bool, uint32_t>>>>> get_exports() const
     {
         assert(ifs);
-        std::vector<std::pair<uint32_t, std::vector<std::pair<uint32_t, uint32_t>>>> out;
+        std::vector<std::pair<uint32_t, std::vector<std::pair<uint32_t, std::pair<bool, uint32_t>>>>> out;
         for (auto &item : exports)
         {
-            std::vector<std::pair<uint32_t, uint32_t>> nids;
+            std::vector<std::pair<uint32_t, std::pair<bool, uint32_t>>> nids;
             uint32_t nid;
             uint32_t off;
             for (auto i = 0; i < item.num_syms_funcs + item.num_syms_vars; i++)
             {
+                bool is_variable = i >= item.num_syms_funcs;
                 ifs.seekg(va2off(item.nid_table) + i * sizeof(uint32_t), std::ios::beg);
                 ifs.read((char *)&nid, sizeof(uint32_t));
                 ifs.seekg(va2off(item.entry_table) + i * sizeof(uint32_t), std::ios::beg);
                 ifs.read((char *)&off, sizeof(uint32_t));
-                nids.push_back(std::make_pair(nid, off));
+                nids.push_back(std::make_pair(nid, std::make_pair(is_variable, off)));
             }
             out.push_back(std::make_pair(item.library_nid, nids));
         }

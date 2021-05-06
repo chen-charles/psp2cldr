@@ -217,21 +217,28 @@ int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinato
             }
             else if (ctx.nids_export_locations.count(nid_hash(libraryNID, functionNID)) != 0)
             {
-                // FIXME: for variables (get_ex/imports)
+                auto &entry = ctx.nids_export_locations[nid_hash(libraryNID, functionNID)];
+                bool is_variable = entry.first;
+                uintptr_t loc = entry.second;
 
-                uintptr_t loc = ctx.nids_export_locations[nid_hash(libraryNID, functionNID)];
-
-                if (f_stub & 1) // thumb
+                if (is_variable)
                 {
-                    char thm_ldr_and_bx_r12[]{"\xdf\xf8\x04\xc0\x60\x47\x00\xbf\x00\x00\x00\x00"};
-                    *(uint32_t *)(thm_ldr_and_bx_r12 + 8) = loc;
-                    proxy.copy_in(f_stub & (~1), thm_ldr_and_bx_r12, sizeof(thm_ldr_and_bx_r12) - 1);
+                    proxy.w<uint32_t>(ptr_f, loc);
                 }
                 else
                 {
-                    char arm_ldr_and_bx_r12[]{"\x00\xc0\x9f\xe5\x1c\xff\x2f\xe1\x00\x00\x00\x00"};
-                    *(uint32_t *)(arm_ldr_and_bx_r12 + 8) = loc;
-                    proxy.copy_in(f_stub, arm_ldr_and_bx_r12, sizeof(arm_ldr_and_bx_r12) - 1);
+                    if (f_stub & 1) // thumb
+                    {
+                        char thm_ldr_and_bx_r12[]{"\xdf\xf8\x04\xc0\x60\x47\x00\xbf\x00\x00\x00\x00"};
+                        *(uint32_t *)(thm_ldr_and_bx_r12 + 8) = loc;
+                        proxy.copy_in(f_stub & (~1), thm_ldr_and_bx_r12, sizeof(thm_ldr_and_bx_r12) - 1);
+                    }
+                    else
+                    {
+                        char arm_ldr_and_bx_r12[]{"\x00\xc0\x9f\xe5\x1c\xff\x2f\xe1\x00\x00\x00\x00"};
+                        *(uint32_t *)(arm_ldr_and_bx_r12 + 8) = loc;
+                        proxy.copy_in(f_stub, arm_ldr_and_bx_r12, sizeof(arm_ldr_and_bx_r12) - 1);
+                    }
                 }
             }
             else
@@ -257,12 +264,12 @@ int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinato
         for (auto &ent : exp.second)
         {
             auto functionNID = ent.first;
-            auto ptr_f = velf.va2la(ent.second, load_base);
+            auto ptr_f = velf.va2la(ent.second.second, load_base);
 
             if (libraryNID == 0x0 && functionNID == 0x935CD196)
             {
                 module_start = ptr_f;
-                LOG(TRACE, "module_start va={:#010x} la={:#010x}", ent.second, module_start);
+                LOG(TRACE, "module_start va={:#010x} la={:#010x}", ent.second.second, module_start);
                 break;
             }
         }
@@ -271,9 +278,11 @@ int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinato
     if (!module_start)
         throw std::runtime_error("module_start is not exported");
 
-    if (call_init_routines({module_start}, ctx, coordinator) != 1)
+    init_routines.push_back(module_start);
+
+    if (call_init_routines(init_routines, ctx, coordinator) != init_routines.size())
     {
-        LOG(ERROR, "module load failed because module_start failed");
+        LOG(ERROR, "module load failed because init_routines failed");
         return 4;
     }
 
@@ -284,11 +293,11 @@ int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinato
         for (auto &ent : exp.second)
         {
             auto functionNID = ent.first;
-            auto ptr_f = velf.va2la(ent.second, load_base);
+            auto ptr_f = velf.va2la(ent.second.second, load_base);
 
             if (libraryNID != 0x0)
             {
-                ctx.nids_export_locations[nid_hash(libraryNID, functionNID)] = ptr_f;
+                ctx.nids_export_locations[nid_hash(libraryNID, functionNID)] = std::make_pair(ent.second.first, ptr_f);
             }
         }
     }
