@@ -21,6 +21,79 @@ static const char INSTR_BKPT3_BXLR_THM[]{"\x03\xbe\x70\x47"};
 static const char INSTR_UND0_BXLR_ARM[]{"\xf0\x00\xf0\xe7\x1e\xff\x2f\xe1"};
 static const char INSTR_UND0_BXLR_THM[]{"\x00\xde\x70\x47"};
 
+static int call_init_routines(std::vector<uintptr_t> init_routines, LoadContext &ctx, ExecutionCoordinator &coordinator)
+{
+    if (init_routines.empty())
+        return 0;
+
+    LOG(DEBUG, "preparing execution environment for init");
+    auto thread = coordinator.thread_create();
+
+    coordinator.register_interrupt_callback(
+        [&ctx](ExecutionCoordinator &coord, ExecutionThread &thread, uint32_t intno) {
+            InterruptContext intr_ctx(coord, thread, ctx);
+            auto pc = thread[RegisterAccessProxy::Register::PC]->r();
+            if (intno == POSIX_SIGILL)
+            {
+                if (thread[RegisterAccessProxy::Register::CPSR]->r() & (1 << 5))
+                    pc |= 1;
+                bool entry_exists = false;
+                import_stub_entry entry;
+                {
+                    std::shared_lock guard(ctx.unimplemented_targets_mutex);
+                    if (ctx.unimplemented_targets.count(pc) != 0)
+                    {
+                        entry_exists = true;
+                        entry = ctx.unimplemented_targets.at(pc);
+                    }
+                }
+
+                if (entry_exists)
+                {
+                    LOG(TRACE, "handler: {}", entry.repr());
+                    auto handler_result = entry.call(&intr_ctx);
+                    LOG(TRACE, "handler exit: {}", entry.repr());
+                    if (handler_result->result() == 0)
+                        return;
+                    else
+                    {
+                        LOG(CRITICAL, "handler {} returned {:#010x} != 0, die ...", entry.repr(), handler_result->result());
+                        coord.panic(1, &intr_ctx);
+                    }
+                }
+                else
+                {
+                    LOG(CRITICAL, "unexpected SIGILL at {:#010x}, instr={:#010x}", pc, coord.proxy().r<uint32_t>(pc));
+                    coord.panic(2, &intr_ctx);
+                }
+            }
+            else
+            {
+                coord.panic(3, &intr_ctx);
+            }
+        });
+
+    uint32_t sp = coordinator.mmap(0, 0x4000) + 0x4000;
+    (*thread)[RegisterAccessProxy::Register::SP]->w(sp);
+    uint32_t lr = coordinator.mmap(0, 0x1000);
+    (*thread)[RegisterAccessProxy::Register::LR]->w(lr);
+
+    int succ_counter = 0;
+    for (auto &la : init_routines)
+    {
+        LOG(DEBUG, "calling init_routine at {:#010x}, until {:#010x}", la, lr);
+        uint32_t init_result;
+        if (thread->start(la, lr) != ExecutionThread::THREAD_EXECUTION_RESULT::OK || (*thread).join(&init_result) != ExecutionThread::THREAD_EXECUTION_RESULT::STOP_UNTIL_POINT_HIT || init_result != 0)
+        {
+            break;
+        }
+        succ_counter++;
+    }
+    coordinator.thread_destory(thread);
+
+    return succ_counter;
+}
+
 static void install_nid_stub(LoadContext &ctx, MemoryAccessProxy &proxy, uint32_t libraryNID, uint32_t functionNID, uint32_t ptr_f, unimplemented_nid_handler stub_func)
 {
     if (ptr_f & 1) // thumb
@@ -172,70 +245,11 @@ int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinato
     if (!module_start)
         throw std::runtime_error("module_start is not exported");
 
-    LOG(DEBUG, "preparing execution environment for module_start");
-    auto thread = coordinator.thread_create();
-
-    coordinator.register_interrupt_callback(
-        [&ctx](ExecutionCoordinator &coord, ExecutionThread &thread, uint32_t intno) {
-            InterruptContext intr_ctx(coord, thread, ctx);
-            auto pc = thread[RegisterAccessProxy::Register::PC]->r();
-            if (intno == POSIX_SIGILL)
-            {
-                if (thread[RegisterAccessProxy::Register::CPSR]->r() & (1 << 5))
-                    pc |= 1;
-
-                bool entry_exists = false;
-                import_stub_entry entry;
-                {
-                    std::shared_lock guard(ctx.unimplemented_targets_mutex);
-                    if (ctx.unimplemented_targets.count(pc) != 0)
-                    {
-                        entry_exists = true;
-                        entry = ctx.unimplemented_targets.at(pc);
-                    }
-                }
-
-                if (entry_exists)
-                {
-                    LOG(TRACE, "handler: {}", entry.repr());
-                    auto handler_result = entry.call(&intr_ctx);
-                    LOG(TRACE, "handler exit: {}", entry.repr());
-                    if (handler_result->result() == 0)
-                        return;
-                    else
-                    {
-                        LOG(CRITICAL, "handler {} returned {:#010x} != 0, die ...", entry.repr(), handler_result->result());
-                        coord.panic(1, &intr_ctx);
-                    }
-                }
-                else
-                {
-                    LOG(CRITICAL, "unexpected SIGILL at {:#010x}, instr={:#010x}", pc, coord.proxy().r<uint32_t>(pc));
-                    coord.panic(2, &intr_ctx);
-                }
-            }
-            else
-            {
-                coord.panic(3, &intr_ctx);
-            }
-        });
-
-    uint32_t sp = coordinator.mmap(0, 0x4000) + 0x4000;
-    //using enum RegisterAccessProxy::Register;   // C++20
-    (*thread)[RegisterAccessProxy::Register::SP]->w(sp);
-    LOG(TRACE, "stack top={:#010x}, size={:#010x}", sp, 0x4000);
-    uint32_t lr = coordinator.mmap(0, 0x1000);
-    (*thread)[RegisterAccessProxy::Register::LR]->w(lr);
-
-    LOG(DEBUG, "calling module_start at {:#010x}, until {:#010x}", module_start, lr);
-    uint32_t module_start_result;
-    if (thread->start(module_start, lr) != ExecutionThread::THREAD_EXECUTION_RESULT::OK || (*thread).join(&module_start_result) != ExecutionThread::THREAD_EXECUTION_RESULT::STOP_UNTIL_POINT_HIT || module_start_result != 0)
+    if (call_init_routines({module_start}, ctx, coordinator) != 1)
     {
-        coordinator.thread_destory(thread);
         LOG(ERROR, "module load failed because module_start failed");
         return 4;
     }
-    coordinator.thread_destory(thread);
 
     LOG(DEBUG, "exporting exports");
     for (auto &exp : exps)
@@ -347,72 +361,10 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
     }
 
     auto init_routines = elf.get_init_routines(proxy, load_base);
-    if (!init_routines.empty())
+    if (call_init_routines(init_routines, ctx, coordinator) != init_routines.size())
     {
-        LOG(DEBUG, "preparing execution environment for init");
-        auto thread = coordinator.thread_create();
-
-        coordinator.register_interrupt_callback(
-            [&ctx](ExecutionCoordinator &coord, ExecutionThread &thread, uint32_t intno) {
-                InterruptContext intr_ctx(coord, thread, ctx);
-                auto pc = thread[RegisterAccessProxy::Register::PC]->r();
-                if (intno == POSIX_SIGILL)
-                {
-                    if (thread[RegisterAccessProxy::Register::CPSR]->r() & (1 << 5))
-                        pc |= 1;
-                    bool entry_exists = false;
-                    import_stub_entry entry;
-                    {
-                        std::shared_lock guard(ctx.unimplemented_targets_mutex);
-                        if (ctx.unimplemented_targets.count(pc) != 0)
-                        {
-                            entry_exists = true;
-                            entry = ctx.unimplemented_targets.at(pc);
-                        }
-                    }
-
-                    if (entry_exists)
-                    {
-                        LOG(TRACE, "handler: {}", entry.repr());
-                        auto handler_result = entry.call(&intr_ctx);
-                        LOG(TRACE, "handler exit: {}", entry.repr());
-                        if (handler_result->result() == 0)
-                            return;
-                        else
-                        {
-                            LOG(CRITICAL, "handler {} returned {:#010x} != 0, die ...", entry.repr(), handler_result->result());
-                            coord.panic(1, &intr_ctx);
-                        }
-                    }
-                    else
-                    {
-                        LOG(CRITICAL, "unexpected SIGILL at {:#010x}, instr={:#010x}", pc, coord.proxy().r<uint32_t>(pc));
-                        coord.panic(2, &intr_ctx);
-                    }
-                }
-                else
-                {
-                    coord.panic(3, &intr_ctx);
-                }
-            });
-
-        uint32_t sp = coordinator.mmap(0, 0x4000) + 0x4000;
-        (*thread)[RegisterAccessProxy::Register::SP]->w(sp);
-        uint32_t lr = coordinator.mmap(0, 0x1000);
-        (*thread)[RegisterAccessProxy::Register::LR]->w(lr);
-
-        for (auto &la : init_routines)
-        {
-            LOG(DEBUG, "calling init_routine at {:#010x}, until {:#010x}", la, lr);
-            uint32_t init_result;
-            if (thread->start(la, lr) != ExecutionThread::THREAD_EXECUTION_RESULT::OK || (*thread).join(&init_result) != ExecutionThread::THREAD_EXECUTION_RESULT::STOP_UNTIL_POINT_HIT || init_result != 0)
-            {
-                coordinator.thread_destory(thread);
-                LOG(ERROR, "module load failed because init_routine failed");
-                return 4;
-            }
-        }
-        coordinator.thread_destory(thread);
+        LOG(ERROR, "module load failed because init_routine failed");
+        return 4;
     }
 
     std::vector<std::pair<std::string, std::pair<Elf32_Sym, uint32_t>>> to_export;
@@ -438,11 +390,18 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
     ctx.libs_loaded.insert(filename);
     for (auto &entry : to_export)
     {
-        ctx.libs_export_locations[entry.first] = entry.second;
         if (entry.first == "_start")
         {
             /* make sure _exit is not called, otherwise newlib shuts down */
+            LOG(WARN, "ELF \"{}\" is exporting \"_start\", is it compiled as an executable instead of a shared library?", filename);
+            LOG(WARN, "If it is indeed a shared library, please use \"static int __attribute__((constructor))\" instead. ");
+            if (call_init_routines({entry.second.second}, ctx, coordinator) != 1)
+            {
+                LOG(ERROR, "module load failed because _start failed");
+                return 4;
+            }
         }
+        ctx.libs_export_locations[entry.first] = entry.second;
     }
 
     LOG(INFO, "ELF \"{}\" load end", filename);
