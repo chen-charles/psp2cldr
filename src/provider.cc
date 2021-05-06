@@ -10,7 +10,7 @@
 #include <psp2cldr/logger.hpp>
 #include <psp2cldr/provider.hpp>
 
-void *Provider_DynamicallyLinkedLibrary::get_impl(const std::string& name) const
+void *Provider_DynamicallyLinkedLibrary::get_impl(const std::string &name) const
 {
     if (m_handle)
     {
@@ -23,7 +23,7 @@ void *Provider_DynamicallyLinkedLibrary::get_impl(const std::string& name) const
     return NULL;
 }
 
-Provider_DynamicallyLinkedLibrary::Provider_DynamicallyLinkedLibrary(const std::string& name)
+Provider_DynamicallyLinkedLibrary::Provider_DynamicallyLinkedLibrary(const std::string &name)
 {
 #ifdef _WIN32
     if (name.empty())
@@ -37,6 +37,8 @@ Provider_DynamicallyLinkedLibrary::Provider_DynamicallyLinkedLibrary(const std::
     if (name.empty())
         m_handle = dlopen(NULL, RTLD_NOW | RTLD_NOLOAD);
     else
+        m_handle = dlopen(name.c_str(), RTLD_LAZY | RTLD_LOCAL);
+#if 0
     {
         // all providers will be loaded into a new LM
         static bool lm_created = false;
@@ -61,6 +63,7 @@ Provider_DynamicallyLinkedLibrary::Provider_DynamicallyLinkedLibrary(const std::
             m_handle = dlmopen(lmid, name.c_str(), RTLD_LAZY | RTLD_LOCAL);
         }
     }
+#endif
 
     if (!m_handle)
         LOG(WARN, "dl(m)open failed: {}", dlerror());

@@ -14,8 +14,6 @@ Loading *userspace* PSP2 VELFs.
    * Recommended, comes with a working CMake, GCC 10.  
 #### `arm32v7/ubuntu:focal`
    * CMake 3.16 has a [bug](https://gitlab.kitware.com/cmake/cmake/-/issues/20568) that renders it unusable on armhf natively, you can either cross-compile ([GNU Toolchain for the A-profile Architecture](https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain/gnu-a/downloads)), or build CMake 3.18+ from source.  
-#### `arm32v7/alpine:3.13.5`
-   * `musl` does not supply `dlmopen`, so no, and similarly for others.  
 
 ## Usage
    1. Displaying information of the supplied VELF  
