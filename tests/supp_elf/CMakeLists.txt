@@ -12,24 +12,15 @@ FILE(GLOB SOURCES *.c)
 foreach(SRC_FILENAME ${SOURCES})
   get_filename_component(SRC_NAME ${SRC_FILENAME} NAME_WLE)
   project(${SRC_NAME})
-  
   include("${VITASDK}/share/vita.cmake" REQUIRED)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -nostdlib")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -nostdlib")
-  
-  link_directories(
-    ${CMAKE_CURRENT_BINARY_DIR}
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+  set (CMAKE_SHARED_LINKER_FLAGS "-Wl,--hash-style=sysv -nostdlib")
+  SET_PROPERTY(GLOBAL PROPERTY TARGET_SUPPORTS_SHARED_LIBS TRUE)
+
+  add_library(${PROJECT_NAME} SHARED
+    ${SRC_FILENAME}
   )
-  
-  add_executable(${PROJECT_NAME}
-    ${PROJECT_NAME}.c
-  )
-  
-  target_link_libraries(${PROJECT_NAME}
-    $ENV{VITASDK}/arm-vita-eabi/lib/libSceLibKernel_stub.a
-    $ENV{VITASDK}/arm-vita-eabi/lib/libSceKernelThreadMgr_stub.a
-  )
-  
-  vita_create_self(${PROJECT_NAME}.self ${PROJECT_NAME})
+
 endforeach()
 
