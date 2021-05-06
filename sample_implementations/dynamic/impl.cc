@@ -1,8 +1,11 @@
 #include <cassert>
+#include <chrono>
 #include <cstdlib>
 #include <iostream>
 #include <mutex>
 #include <sstream>
+#include <thread>
+#include <unordered_map>
 
 #include <psp2cldr/imp_provider.hpp>
 
@@ -169,3 +172,77 @@ DEFINE_VITA_IMP_SYM_EXPORT(basic_test_variable)
         HANDLER_RETURN(0);
     }
 }
+
+std::unordered_map<uint32_t, std::weak_ptr<ExecutionThread>> threads;
+uint32_t thread_id_ctr = 1;
+std::mutex threads_lock;
+
+DECLARE_VITA_IMP_NID_EXPORT(CAE9ACE6, C5C11EE7, sceKernelCreateThread)
+DEFINE_VITA_IMP_NID_EXPORT(CAE9ACE6, C5C11EE7)
+{
+    DECLARE_VITA_IMP_TYPE(FUNCTION);
+
+    auto thread = ctx->coord.thread_create();
+    (*thread)[RegisterAccessProxy::Register::IP]->w(PARAM(ctx, 1)); // we will store this in IP, start thread will use this value as PC
+    (*thread)[RegisterAccessProxy::Register::SP]->w(ctx->coord.mmap(0, PARAM(ctx, 3)) + PARAM(ctx, 3));
+    (*thread)[RegisterAccessProxy::Register::LR]->w(ctx->coord.mmap(0, 0x1000));
+
+    uint32_t threadID;
+    {
+        std::lock_guard<std::mutex> guard{threads_lock};
+        threadID = thread_id_ctr++;
+        threads[threadID] = thread;
+    }
+
+    TARGET_RETURN(threadID);
+    HANDLER_RETURN(0);
+}
+
+DECLARE_VITA_IMP_NID_EXPORT(CAE9ACE6, F08DE149, sceKernelStartThread)
+DEFINE_VITA_IMP_NID_EXPORT(CAE9ACE6, F08DE149)
+{
+    DECLARE_VITA_IMP_TYPE(FUNCTION);
+
+    uint32_t pp_args = PARAM(ctx, 2);
+    {
+        std::lock_guard<std::mutex> guard{threads_lock};
+        if (auto ptr = threads[PARAM(ctx, 0)].lock())
+        {
+            (*ptr)[RegisterAccessProxy::Register::R0]->w(PARAM(ctx, 1));
+            (*ptr)[RegisterAccessProxy::Register::R1]->w(PARAM(ctx, 2));
+            ptr->start((*ptr)[RegisterAccessProxy::Register::IP]->r(), (*ptr)[RegisterAccessProxy::Register::LR]->r());
+        }
+    }
+
+    TARGET_RETURN(0);
+    HANDLER_RETURN(0);
+}
+
+DECLARE_VITA_IMP_NID_EXPORT(859A24B1, 1BBDE3D9, sceKernelDeleteThread)
+DEFINE_VITA_IMP_NID_EXPORT(859A24B1, 1BBDE3D9)
+{
+    DECLARE_VITA_IMP_TYPE(FUNCTION);
+    {
+        std::lock_guard<std::mutex> guard{threads_lock};
+        if (auto ptr = threads[PARAM_0].lock())
+        {
+            ctx->coord.thread_destory(ptr);
+        }
+        threads.erase(PARAM_0);
+    }
+
+    TARGET_RETURN(0);
+    HANDLER_RETURN(0);
+}
+
+DECLARE_VITA_IMP_NID_EXPORT(859A24B1, 4B675D05, sceKernelDelayThread)
+DEFINE_VITA_IMP_NID_EXPORT(859A24B1, 4B675D05)
+{
+    DECLARE_VITA_IMP_TYPE(FUNCTION);
+    std::this_thread::sleep_for(std::chrono::microseconds(PARAM(ctx, 0)));
+
+    TARGET_RETURN(0);
+    HANDLER_RETURN(0);
+}
+
+VITA_IMP_NID_FORWARD_SYM(CAE9ACE6, FA26BC62, "printf")

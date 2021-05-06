@@ -28,7 +28,7 @@ Supplementary ELFs need to be built for the target platform, with the following 
 ```bash
 arm-vita-eabi-gcc -shared -o libyours.so -Wl,--hash-style=sysv,--whole-archive libyours.a -nostdlib
 ```
-
+Newlib has been compiled [here](https://github.com/chen-charles/psp2cldr-newlib/releases) (all syscalls should be provided from the providers). `thread_basic*` can be tested with the sample dynamic implementation.  
 Note: `DT_NEEDED` tag is respected.  
 
 ## Known Limitations
