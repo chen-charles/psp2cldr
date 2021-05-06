@@ -5,6 +5,7 @@
 DECLARE_VITA_IMP_NID_EXPORT(88758561, 391b74b8, ksceDebugPrintf)
 DEFINE_VITA_IMP_NID_EXPORT(88758561, 391b74b8)
 {
+    DECLARE_VITA_IMP_TYPE(FUNCTION);
     std::cout << "(static)ksceDebugPrintf_stage2:";
     uint32_t r0 = ctx->thread[RegisterAccessProxy::Register::R0]->r();
     char ch;
@@ -21,6 +22,7 @@ DEFINE_VITA_IMP_NID_EXPORT(88758561, 391b74b8)
 
 DEFINE_VITA_IMP_NID_EXPORT(88758561, 391b74b7)
 {
+    DECLARE_VITA_IMP_TYPE(FUNCTION);
     std::cout << "(static)ksceDebugPrintf_stage1:" << std::endl;
     return ksceDebugPrintf(ctx);
 }

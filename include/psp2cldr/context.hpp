@@ -158,13 +158,6 @@ public:
     std::vector<std::string> search_paths;
 
     std::unordered_map<NID_t, std::string> nid_to_filename;
-
-    // override *import* NID function provided by velfs loaded
-    std::unordered_map<NIDHASH_t, unimplemented_nid_handler> nid_overrides;
-
-    // override symbols in the GLOBAL namespace
-    std::unordered_map<std::string, unimplemented_sym_handler> sym_overrides;
-
 public:
     /* loader context */
     std::shared_mutex unimplemented_targets_mutex;

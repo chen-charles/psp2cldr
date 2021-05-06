@@ -7,6 +7,7 @@
 
 DEFINE_VITA_IMP_NID_EXPORT(88758561, 391B74B7)
 {
+    DECLARE_VITA_IMP_TYPE(FUNCTION);
     std::cout << "ksceDebugPrintf: entry" << std::endl;
 
     uint32_t r0 = ctx->thread[RegisterAccessProxy::Register::R0]->r();
@@ -35,6 +36,7 @@ DEFINE_VITA_IMP_NID_EXPORT(88758561, 391B74B7)
 #undef _fstat // WATCHOUT: _fstat might be defined somewhere else
 DEFINE_VITA_IMP_SYM_EXPORT(_fstat)
 {
+    DECLARE_VITA_IMP_TYPE(FUNCTION);
     uint32_t fd = ctx->thread[RegisterAccessProxy::Register::R0]->r();
     uint32_t buf = ctx->thread[RegisterAccessProxy::Register::R1]->r();
 
@@ -61,6 +63,7 @@ DEFINE_VITA_IMP_SYM_EXPORT(_fstat)
 
 DEFINE_VITA_IMP_SYM_EXPORT(_sbrk)
 {
+    DECLARE_VITA_IMP_TYPE(FUNCTION);
     auto increment = ctx->thread[RegisterAccessProxy::Register::R0]->r();
 
     static const uint32_t size = 0x2800000; // 40MB
@@ -82,6 +85,7 @@ DEFINE_VITA_IMP_SYM_EXPORT(_sbrk)
 
 DEFINE_VITA_IMP_SYM_EXPORT(_close)
 {
+    DECLARE_VITA_IMP_TYPE(FUNCTION);
     ctx->thread[RegisterAccessProxy::Register::R0]->w(-1);
     ctx->thread[RegisterAccessProxy::Register::PC]->w(ctx->thread[RegisterAccessProxy::Register::LR]->r());
     return std::make_shared<HandlerResult>(0);
@@ -89,6 +93,7 @@ DEFINE_VITA_IMP_SYM_EXPORT(_close)
 
 DEFINE_VITA_IMP_SYM_EXPORT(_isatty)
 {
+    DECLARE_VITA_IMP_TYPE(FUNCTION);
     ctx->thread[RegisterAccessProxy::Register::R0]->w(1);
     ctx->thread[RegisterAccessProxy::Register::PC]->w(ctx->thread[RegisterAccessProxy::Register::LR]->r());
     return std::make_shared<HandlerResult>(0);
@@ -96,6 +101,7 @@ DEFINE_VITA_IMP_SYM_EXPORT(_isatty)
 
 DEFINE_VITA_IMP_SYM_EXPORT(_exit)
 {
+    DECLARE_VITA_IMP_TYPE(FUNCTION);
     ctx->coord.thread_stopall(0);
     return std::make_shared<HandlerResult>(0);
 }
@@ -103,6 +109,7 @@ DEFINE_VITA_IMP_SYM_EXPORT(_exit)
 #undef _write
 DEFINE_VITA_IMP_SYM_EXPORT(_write)
 {
+    DECLARE_VITA_IMP_TYPE(FUNCTION);
     uint32_t ptr = ctx->thread[RegisterAccessProxy::Register::R1]->r();
     uint32_t len = ctx->thread[RegisterAccessProxy::Register::R2]->r();
 
@@ -120,6 +127,7 @@ DEFINE_VITA_IMP_SYM_EXPORT(_write)
 #undef _open
 DEFINE_VITA_IMP_SYM_EXPORT(_open)
 {
+    DECLARE_VITA_IMP_TYPE(FUNCTION); // required for SYM_EXPORT
     uint32_t name = ctx->thread[RegisterAccessProxy::Register::R0]->r();
     uint32_t flags = ctx->thread[RegisterAccessProxy::Register::R1]->r();
     uint32_t mode = ctx->thread[RegisterAccessProxy::Register::R2]->r();

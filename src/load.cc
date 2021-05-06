@@ -14,12 +14,12 @@ namespace fs = std::filesystem;
 namespace fs = std::experimental::filesystem;
 #endif
 
-static const char INSTR_BPKT3_BXLR_ARM[]{"\x73\x00\x20\xe1\x1e\xff\x2f\xe1"};
-static const char INSTR_BKPT3_BXLR_THM[]{"\x03\xbe\x70\x47"};
+static const char INSTR_BPKT3_ARM[]{"\x73\x00\x20\xe1"};
+static const char INSTR_BKPT3_THM[]{"\x03\xbe"};
 
 // use UDF instructions to generate interruption, instead of using BKPT
-static const char INSTR_UND0_BXLR_ARM[]{"\xf0\x00\xf0\xe7\x1e\xff\x2f\xe1"};
-static const char INSTR_UND0_BXLR_THM[]{"\x00\xde\x70\x47"};
+static const uint32_t INSTR_UDF0_ARM = 0xe7f000f0;
+static const uint16_t INSTR_UDF0_THM = 0xde00;
 
 static int call_init_routines(std::vector<uintptr_t> init_routines, LoadContext &ctx, ExecutionCoordinator &coordinator)
 {
@@ -27,8 +27,6 @@ static int call_init_routines(std::vector<uintptr_t> init_routines, LoadContext 
         return 0;
 
     LOG(DEBUG, "preparing execution environment for init");
-    auto thread = coordinator.thread_create();
-
     coordinator.register_interrupt_callback(
         [&ctx](ExecutionCoordinator &coord, ExecutionThread &thread, uint32_t intno) {
             InterruptContext intr_ctx(coord, thread, ctx);
@@ -73,33 +71,49 @@ static int call_init_routines(std::vector<uintptr_t> init_routines, LoadContext 
             }
         });
 
-    uint32_t sp = coordinator.mmap(0, 0x4000) + 0x4000;
-    (*thread)[RegisterAccessProxy::Register::SP]->w(sp);
+    static const size_t stack_sz = 0x4000;
+    uint32_t sp_base = coordinator.mmap(0, stack_sz);
+    uint32_t sp = sp_base + stack_sz;
     uint32_t lr = coordinator.mmap(0, 0x1000);
-    (*thread)[RegisterAccessProxy::Register::LR]->w(lr);
 
     int succ_counter = 0;
     for (auto &la : init_routines)
     {
         LOG(DEBUG, "calling init_routine at {:#010x}, until {:#010x}", la, lr);
+        auto thread = coordinator.thread_create();
+        (*thread)[RegisterAccessProxy::Register::SP]->w(sp);
+        (*thread)[RegisterAccessProxy::Register::LR]->w(lr);
+
         uint32_t init_result;
-        if (thread->start(la, lr) != ExecutionThread::THREAD_EXECUTION_RESULT::OK || (*thread).join(&init_result) != ExecutionThread::THREAD_EXECUTION_RESULT::STOP_UNTIL_POINT_HIT || init_result != 0)
-        {
+        bool failed = thread->start(la, lr) != ExecutionThread::THREAD_EXECUTION_RESULT::OK || (*thread).join(&init_result) != ExecutionThread::THREAD_EXECUTION_RESULT::STOP_UNTIL_POINT_HIT || init_result != 0;
+        coordinator.thread_destory(thread);
+        if (failed)
             break;
-        }
         succ_counter++;
     }
-    coordinator.thread_destory(thread);
+
+    coordinator.munmap(sp_base, stack_sz);
+    coordinator.munmap(lr, 0x1000);
 
     return succ_counter;
 }
 
-static void install_nid_stub(LoadContext &ctx, MemoryAccessProxy &proxy, uint32_t libraryNID, uint32_t functionNID, uint32_t ptr_f, unimplemented_nid_handler stub_func)
+static void install_nid_stub(LoadContext &ctx, MemoryAccessProxy &proxy, uint32_t libraryNID, uint32_t functionNID, uint32_t ptr_f, bool in_place, unimplemented_nid_handler stub_func)
 {
-    if (ptr_f & 1) // thumb
-        proxy.copy_in(ptr_f & (~1), INSTR_UND0_BXLR_THM, sizeof(INSTR_UND0_BXLR_THM));
+    uint32_t stub_location;
+    if (in_place)
+    {
+        stub_location = ptr_f;
+    }
     else
-        proxy.copy_in(ptr_f, INSTR_UND0_BXLR_ARM, sizeof(INSTR_UND0_BXLR_ARM));
+    {
+        stub_location = proxy.r<uint32_t>(ptr_f);
+    }
+
+    if (stub_location & 1) // thumb
+        proxy.copy_in(stub_location & (~1), &INSTR_UDF0_THM, sizeof(INSTR_UDF0_THM));
+    else
+        proxy.copy_in(stub_location, &INSTR_UDF0_ARM, sizeof(INSTR_UDF0_ARM));
 
     nid_stub stub;
     stub.libraryNID = libraryNID;
@@ -107,7 +121,7 @@ static void install_nid_stub(LoadContext &ctx, MemoryAccessProxy &proxy, uint32_
     stub.func = stub_func;
 
     std::unique_lock guard(ctx.unimplemented_targets_mutex);
-    ctx.unimplemented_targets[ptr_f] = stub;
+    ctx.unimplemented_targets[stub_location] = stub;
 }
 
 int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator &coordinator)
@@ -123,9 +137,7 @@ int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinato
         for (auto &ent : imp.second)
         {
             auto functionNID = ent.first;
-            if (ctx.nid_overrides.count(nid_hash(libraryNID, functionNID)) != 0)
-                continue;
-            else if (ctx.provider() && ctx.provider()->get(libraryNID, functionNID))
+            if (ctx.provider() && ctx.provider()->get(libraryNID, functionNID))
                 continue;
             else if (ctx.nids_loaded.count(libraryNID) == 0)
             {
@@ -171,6 +183,7 @@ int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinato
     LOG(INFO, "load base={:#010x}", load_base);
 
     LOG(DEBUG, "resolving imports");
+    std::vector<uintptr_t> init_routines;
     for (auto &imp : imps)
     {
         auto libraryNID = imp.first;
@@ -180,37 +193,50 @@ int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinato
             auto ptr_f = velf.va2la(ent.second, load_base);
             assert(ptr_f != -1);
 
-            if (ctx.nid_overrides.count(nid_hash(libraryNID, functionNID)) != 0)
+            auto f_stub = proxy.r<uint32_t>(ptr_f);
+
+            if (ctx.provider() && ctx.provider()->get(libraryNID, functionNID))
             {
-                install_nid_stub(ctx, proxy, libraryNID, functionNID, ptr_f, ctx.nid_overrides[nid_hash(libraryNID, functionNID)]);
-            }
-            else if (ctx.provider() && ctx.provider()->get(libraryNID, functionNID))
-            {
-                install_nid_stub(ctx, proxy, libraryNID, functionNID, ptr_f,
-                                 [](NID_t libraryNID, NID_t functionNID, InterruptContext *ctx) {
-                                     return ctx->load.provider()->get(libraryNID, functionNID)(ctx);
-                                 });
+                auto type_of_import = ctx.provider()->get(libraryNID, functionNID)(nullptr)->result();
+
+                if (type_of_import == ProviderPokeResult::VARIABLE)
+                {
+                    install_nid_stub(ctx, proxy, libraryNID, functionNID, ptr_f, true,
+                                     [](NID_t libraryNID, NID_t functionNID, InterruptContext *ctx) {
+                                         return ctx->load.provider()->get(libraryNID, functionNID)(ctx);
+                                     });
+                    init_routines.push_back(ptr_f);
+                }
+                else
+                {
+                    install_nid_stub(ctx, proxy, libraryNID, functionNID, ptr_f, false,
+                                     [](NID_t libraryNID, NID_t functionNID, InterruptContext *ctx) {
+                                         return ctx->load.provider()->get(libraryNID, functionNID)(ctx);
+                                     });
+                }
             }
             else if (ctx.nids_export_locations.count(nid_hash(libraryNID, functionNID)) != 0)
             {
+                // FIXME: for variables (get_ex/imports)
+
                 uintptr_t loc = ctx.nids_export_locations[nid_hash(libraryNID, functionNID)];
 
-                if (ptr_f & 1) // thumb
+                if (f_stub & 1) // thumb
                 {
                     char thm_ldr_and_bx_r12[]{"\xdf\xf8\x04\xc0\x60\x47\x00\xbf\x00\x00\x00\x00"};
                     *(uint32_t *)(thm_ldr_and_bx_r12 + 8) = loc;
-                    proxy.copy_in(ptr_f & (~1), thm_ldr_and_bx_r12, sizeof(thm_ldr_and_bx_r12) - 1);
+                    proxy.copy_in(f_stub & (~1), thm_ldr_and_bx_r12, sizeof(thm_ldr_and_bx_r12) - 1);
                 }
                 else
                 {
                     char arm_ldr_and_bx_r12[]{"\x00\xc0\x9f\xe5\x1c\xff\x2f\xe1\x00\x00\x00\x00"};
                     *(uint32_t *)(arm_ldr_and_bx_r12 + 8) = loc;
-                    proxy.copy_in(ptr_f, arm_ldr_and_bx_r12, sizeof(arm_ldr_and_bx_r12) - 1);
+                    proxy.copy_in(f_stub, arm_ldr_and_bx_r12, sizeof(arm_ldr_and_bx_r12) - 1);
                 }
             }
             else
             {
-                install_nid_stub(ctx, proxy, libraryNID, functionNID, ptr_f,
+                install_nid_stub(ctx, proxy, libraryNID, functionNID, ptr_f, false,
                                  [](NID_t libraryNID, NID_t functionNID, InterruptContext *ctx) {
                                      LOG(CRITICAL, "import stub for {:#010x}:{:#010x} is hit, unimplemented", libraryNID, functionNID);
                                      return std::make_shared<HandlerResult>(1);
@@ -272,12 +298,28 @@ int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinato
 }
 
 #include <psp2cldr/arm_elfloader.hpp>
-static void install_sym_stub(LoadContext &ctx, ExecutionCoordinator &coordinator, std::string sym_name, Elf32_Sym sym, uint32_t ptr_f, unimplemented_sym_handler stub_func)
+static void install_sym_stub(LoadContext &ctx, ExecutionCoordinator &coordinator, std::string sym_name, Elf32_Sym sym, uint32_t ptr_f, bool in_place, unimplemented_sym_handler stub_func)
 {
-    static uint32_t handler_stub_loc = coordinator.mmap(0, 0x4000);
     auto &proxy = coordinator.proxy();
 
-    proxy.copy_in(handler_stub_loc, INSTR_UND0_BXLR_ARM, sizeof(INSTR_UND0_BXLR_ARM) - 1);
+    uint32_t stub_location;
+    if (!in_place)
+    {
+        static uint32_t handler_stub_loc = coordinator.mmap(0, 0x4000);
+        stub_location = handler_stub_loc;
+        handler_stub_loc += sizeof(INSTR_UDF0_ARM);
+
+        proxy.w<uint32_t>(ptr_f, stub_location);
+    }
+    else
+    {
+        stub_location = ptr_f;
+    }
+
+    if (ptr_f & 1)
+        proxy.w<uint32_t>(stub_location, INSTR_UDF0_THM);
+    else
+        proxy.w<uint32_t>(stub_location, INSTR_UDF0_ARM);
 
     sym_stub stub;
     stub.name = sym_name;
@@ -286,11 +328,8 @@ static void install_sym_stub(LoadContext &ctx, ExecutionCoordinator &coordinator
 
     {
         std::unique_lock guard(ctx.unimplemented_targets_mutex);
-        ctx.unimplemented_targets[handler_stub_loc] = stub;
+        ctx.unimplemented_targets[stub_location] = stub;
     }
-
-    proxy.w<uint32_t>(ptr_f, handler_stub_loc);
-    handler_stub_loc += sizeof(INSTR_UND0_BXLR_ARM) - 1;
 }
 
 int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator &coordinator)
@@ -329,21 +368,31 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
     LOG(INFO, "load base={:#010x}", load_base);
 
     LOG(DEBUG, "resolving imports");
+    std::vector<uintptr_t> init_routines;
     for (auto &imp : elf.get_imports())
     {
-        std::string sym_name{elf.getstr(imp.first.st_name)};
-
+        auto &sym = imp.first;
+        std::string sym_name{elf.getstr(sym.st_name)};
+        // ELF32_ST_TYPE(sym.st_info) is recorded in the exports; the importer has no knowledge of it
         auto ptr_f = elf.va2la(imp.second, load_base);
 
-        if (ctx.sym_overrides.count(sym_name) != 0)
+        if (ctx.provider() && ctx.provider()->get(sym_name.c_str()))
         {
-            install_sym_stub(ctx, coordinator, sym_name, imp.first, ptr_f, ctx.sym_overrides[sym_name]);
-        }
-        else if (ctx.provider() && ctx.provider()->get(sym_name.c_str()))
-        {
-            install_sym_stub(ctx, coordinator, sym_name, imp.first, ptr_f, [](std::string name, Elf32_Sym sym, InterruptContext *ctx) {
-                return ctx->load.provider()->get(name.c_str())(ctx);
-            });
+            auto type_of_import = ctx.provider()->get(sym_name.c_str())(nullptr)->result();
+
+            if (type_of_import == ProviderPokeResult::VARIABLE)
+            {
+                install_sym_stub(ctx, coordinator, sym_name, imp.first, ptr_f, true, [](std::string name, Elf32_Sym sym, InterruptContext *ctx) {
+                    return ctx->load.provider()->get(name.c_str())(ctx);
+                });
+                init_routines.push_back(ptr_f);
+            }
+            else
+            {
+                install_sym_stub(ctx, coordinator, sym_name, imp.first, ptr_f, false, [](std::string name, Elf32_Sym sym, InterruptContext *ctx) {
+                    return ctx->load.provider()->get(name.c_str())(ctx);
+                });
+            }
         }
         else if (ctx.libs_export_locations.count(sym_name) != 0)
         {
@@ -353,14 +402,16 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
         }
         else
         {
-            install_sym_stub(ctx, coordinator, sym_name, imp.first, ptr_f, [](std::string name, Elf32_Sym sym, InterruptContext *ctx) {
+            // TODO: remove, since the importer does not know if the stub is installed on a ptr to a variable
+            install_sym_stub(ctx, coordinator, sym_name, imp.first, ptr_f, false, [](std::string name, Elf32_Sym sym, InterruptContext *ctx) {
                 LOG(CRITICAL, "import stub for {} is hit, unimplemented", name);
                 return std::make_shared<HandlerResult>(1);
             });
         }
     }
 
-    auto init_routines = elf.get_init_routines(proxy, load_base);
+    auto elf_init_routines = elf.get_init_routines(proxy, load_base);
+    std::move(elf_init_routines.begin(), elf_init_routines.end(), std::back_inserter(init_routines));
     if (call_init_routines(init_routines, ctx, coordinator) != init_routines.size())
     {
         LOG(ERROR, "module load failed because init_routine failed");

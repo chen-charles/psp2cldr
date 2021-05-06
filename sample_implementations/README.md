@@ -13,18 +13,12 @@ There is a single include you will need in order to access the `psp2cldr` provid
 ```cpp
 DECLARE_VITA_IMP_NID_EXPORT(88758561, 391B74B8, ksceDebugPrintf) // ksceDebugPrintf is an alias that can be called from within the provider module
 ```
-##### Variables
-From the exporter's perspective, the location value (as in the export table) is the address to the data of the variable.  
-From the importer's perspective, variables are function calls. Presumably that would return the location value(cannot be the value it self, nor can it be a pointer to the location, since the exporter didn't provide one).  
 
 #### ELF
 ```cpp
 #undef _fstat // WATCHOUT: _fstat might be defined somewhere else
 DECLARE_VITA_IMP_SYM_EXPORT(_fstat)
 ```
-##### Variables
-From the exporter's perspective, it is a function call to a pointer to a pointer to data.  
-From the importer's perspective, presumably it would be a function call to the exporter's exporting function.  
 
 ### Defining an export
 You will be returning a `shared_ptr` to `HandlerResult`, its definition is included from `imp_provider`.  
@@ -38,6 +32,7 @@ ctx->thread[RegisterAccessProxy::Register::PC]->w(ctx->thread[RegisterAccessProx
 // note: variables are actually exported as a function call that returns
 DEFINE_VITA_IMP_NID_EXPORT(88758561, 391B74B8)  // parameter (InterruptContext *ctx)
 {
+    DECLARE_VITA_IMP_TYPE(FUNCTION); // required, see "Notes on Variables"
     // your implementation here
     return std::make_shared<HandlerResult>(0);
 }
@@ -48,6 +43,7 @@ DEFINE_VITA_IMP_NID_EXPORT(88758561, 391B74B8)  // parameter (InterruptContext *
 #undef _fstat
 DEFINE_VITA_IMP_SYM_EXPORT(_fstat)  // parameter (InterruptContext *ctx)
 {
+    DECLARE_VITA_IMP_TYPE(FUNCTION); // required, see "Notes on Variables"
     // your implementation here
     return std::make_shared<HandlerResult>(0);
 }
@@ -64,6 +60,8 @@ Suppose you are writing sceClibMemset with `newlib` already loaded into the targ
 DECLARE_VITA_IMP_NID_EXPORT(F9C9C52F, 632980D7, sceClibMemset)
 DEFINE_VITA_IMP_NID_EXPORT(F9C9C52F, 632980D7)
 {
+    DECLARE_VITA_IMP_TYPE(FUNCTION); // required, see "Notes on Variables"
+
     uint32_t dst = ctx->thread[RegisterAccessProxy::Register::R0]->r();
     uint32_t ch = ctx->thread[RegisterAccessProxy::Register::R1]->r();
     uint32_t len = ctx->thread[RegisterAccessProxy::Register::R2]->r();
@@ -86,6 +84,8 @@ You may also chain the continuations if you need to make multiple calls to the t
 DECLARE_VITA_IMP_NID_EXPORT(88758561, 391B74B7, ksceDebugPrintf)
 DEFINE_VITA_IMP_NID_EXPORT(88758561, 391B74B7)
 {
+    DECLARE_VITA_IMP_TYPE(FUNCTION); // required, see "Notes on Variables"
+
     // 1st entry
     uint32_t r0 = ctx->thread[RegisterAccessProxy::Register::R0]->r();
     return ctx->handler_call_target_function("strlen", r0)
@@ -115,6 +115,8 @@ Intermodular calls are similar to how they are done from `psp2cldr`,
 DECLARE_VITA_IMP_NID_EXPORT(88758561, 391B74B7, ksceDebugPrintf)
 DEFINE_VITA_IMP_NID_EXPORT(88758561, 391B74B7)
 {
+    DECLARE_VITA_IMP_TYPE(FUNCTION); // required, see "Notes on Variables"
+    
     provider_func_call p_func;
 
     p_func = ctx->load.provider()->get("symbol_name");
@@ -148,3 +150,29 @@ DEFINE_VITA_IMP_NID_EXPORT(F9C9C52F, 632980D7)
 ### Compilation
 The provider module needs to be compiled as a shared library for the **HOST** platform. Please see `sample_implementations/`.  
 It is recommended to use `-fvisibility=hidden` with `GNU Tools`, or equivalent flags on other compilers, to avoid exporting unnecessary symbols.  
+
+### Notes on Variables
+#### ELF
+Suppose `rel.r_offset` has a value of `0xABCD`, which once loaded, is translated to `0xAAAAAAAA`, then,  
+ * for variables: `[0xAAAAAAAA]` is a pointer to the imported variable  
+ * for functions: `[0xAAAAAAAA]` is your new PC  
+  
+For stubbing, this means we need a level of indirection for functions, but we must not do that for variables.  
+  
+ELF does not differentiate between variables and functions, i.e., the importer has no idea if a symbol is a variable or a function based solely on the dynamic section.  You may argue that `R_*_GLOB_DAT` indicates a variable while `R_*_JUMP_SLOT` indicates a function, however, these two relocation types can usually interchange.  
+  
+To mitigate this issue, all exports are required to respond to a *poke*,  
+```cpp
+DEFINE_VITA_IMP_SYM_EXPORT(test_variable)
+{
+    DECLARE_VITA_IMP_TYPE(VARIABLE); // if (!ctx) return an indication that this is a VARIABLE
+    // your implementation here, this handler is called each time a module/library imports this variable
+    // _p_data is a pointer to the variable
+    ctx->coord.proxy().w<uint32_t>(ctx->thread[RegisterAccessProxy::Register::PC]->r(), _p_data);
+    TARGET_RETURN(0);
+    HANDLER_RETURN(0);
+}
+```
+
+#### VITA
+Basically identical to ELF, except for a provided function stub that returns `-1` for each imported function.  

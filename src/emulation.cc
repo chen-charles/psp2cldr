@@ -154,7 +154,7 @@ ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Unicorn::join(uint32_t 
         case THREAD_EXECUTION_STATE::EXITED:
             if (retval != nullptr)
                 *retval = (*this)[RegisterAccessProxy::Register::R0]->r();
-            return ExecutionThread::THREAD_EXECUTION_RESULT::OK;
+            return m_result;
         }
     }
 

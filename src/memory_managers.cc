@@ -68,9 +68,10 @@ uintptr_t MemoryTranslator::add(uintptr_t addr, size_t length, uintptr_t ptr)
 
 int MemoryTranslator::erase(uintptr_t addr, size_t length)
 {
-    auto it = m_memory_map.find(std::make_pair(addr, length));
+    auto it = m_memory_map.find(std::make_pair(addr, addr + length));
     if (it == m_memory_map.end())
         throw std::runtime_error("attempted to erase an unmapped region");
+
     m_memory_map.erase(it);
     return 0;
 }

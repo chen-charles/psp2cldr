@@ -5,6 +5,7 @@
 #include <psp2cldr/arch.h>
 #include <psp2cldr/context.hpp>
 #include <psp2cldr/coordinator.hpp>
+#include <psp2cldr/provider_poke.hpp>
 
 /* intended for libraries providing NID function definitions */
 
@@ -28,12 +29,6 @@
     VITA_EXPORT VITA_IMP_RETURN_TYPE VITA_EXPORT_CONVENTION VITA_IMP_SYM_EXPORT_NAME(name)(InterruptContext *);
 #define DEFINE_VITA_IMP_SYM_EXPORT(name) VITA_EXPORT VITA_IMP_RETURN_TYPE VITA_EXPORT_CONVENTION VITA_IMP_SYM_EXPORT_NAME(name)(InterruptContext * ctx)
 
-#define VITA_IMP_NID_FORWARD_SYM(libraryNID, functionNID, target) \
-    DEFINE_VITA_IMP_NID_EXPORT(libraryNID, functionNID)           \
-    {                                                             \
-        return ctx->install_forward_handler(target);              \
-    }
-
 #define PARAM_0 ctx->thread[RegisterAccessProxy::Register::R0]->r()
 #define PARAM_1 ctx->thread[RegisterAccessProxy::Register::R1]->r()
 #define PARAM_2 ctx->thread[RegisterAccessProxy::Register::R2]->r()
@@ -43,6 +38,18 @@
     ctx->thread[RegisterAccessProxy::Register::R0]->w(val); \
     ctx->thread[RegisterAccessProxy::Register::PC]->w(ctx->thread[RegisterAccessProxy::Register::LR]->r())
 #define HANDLER_RETURN(val) return std::make_shared<HandlerResult>(val)
+
+#define _FORWARD_PASTE(a) a
+#define DECLARE_VITA_IMP_TYPE(type) \
+    if (!ctx)                       \
+    HANDLER_RETURN(ProviderPokeResult::_FORWARD_PASTE(type))
+
+#define VITA_IMP_NID_FORWARD_SYM(libraryNID, functionNID, target) \
+    DEFINE_VITA_IMP_NID_EXPORT(libraryNID, functionNID)           \
+    {                                                             \
+        DECLARE_VITA_IMP_TYPE(FUNCTION);                          \
+        return ctx->install_forward_handler(target);              \
+    }
 
 static inline uint32_t PARAM(InterruptContext *ctx, uint32_t idx) /* slow */
 {

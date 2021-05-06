@@ -8,6 +8,7 @@
 #include <vector>
 
 #include <psp2cldr/arch.h>
+#include <psp2cldr/provider_poke.hpp>
 
 static inline const char vita_imp_nid_export_name_pattern[]{"psp2cldr_imp_%08X_%08X_"};
 static inline const char vita_imp_sym_export_name_pattern[]{"psp2cldr_imp_%s_"};

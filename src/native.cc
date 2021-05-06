@@ -195,18 +195,18 @@ ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Native::start(uint32_t 
 {
     (*this)[RegisterAccessProxy::Register::PC]->w(from);
 
-    static const uint32_t INSTR_UND0_ARM = 0xe7f000f0;
-    static const uint16_t INSTR_UND0_THM = 0xde00;
+    static const uint32_t INSTR_UDF0_ARM = 0xe7f000f0;
+    static const uint16_t INSTR_UDF0_THM = 0xde00;
 
     if (until & 1) // thumb
     {
         m_until_point_instr_backup = m_coord.proxy().r<uint16_t>(until & (~1));
-        m_coord.proxy().w<uint16_t>(until & (~1), INSTR_UND0_THM);
+        m_coord.proxy().w<uint16_t>(until & (~1), INSTR_UDF0_THM);
     }
     else
     {
         m_until_point_instr_backup = m_coord.proxy().r<uint32_t>(until & (~1));
-        m_coord.proxy().w<uint32_t>(until & (~1), INSTR_UND0_ARM);
+        m_coord.proxy().w<uint32_t>(until & (~1), INSTR_UDF0_ARM);
     }
 
     m_target_until_point = until;

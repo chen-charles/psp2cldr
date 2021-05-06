@@ -17,7 +17,8 @@ static std::shared_ptr<HandlerContinuation> _handler_call_target_function_impl(u
     {
         std::lock_guard<std::mutex> guard(continuation_mutex);
 
-        static const char INSTR_UND0_BXLR_ARM[]{"\xf0\x00\xf0\xe7\x1e\xff\x2f\xe1"};
+        static const uint32_t INSTR_UDF0_ARM = 0xe7f000f0;
+
         static bool is_init = false;
         static uint32_t handler_stub_loc;
         static uint32_t handler_stub_top;
@@ -30,7 +31,7 @@ static std::shared_ptr<HandlerContinuation> _handler_call_target_function_impl(u
             is_init = true;
         }
 
-        ctx->coord.proxy().copy_in(handler_stub_loc, INSTR_UND0_BXLR_ARM, sizeof(INSTR_UND0_BXLR_ARM) - 1);
+        ctx->coord.proxy().copy_in(handler_stub_loc, &INSTR_UDF0_ARM, sizeof(INSTR_UDF0_ARM));
 
         out = std::make_shared<HandlerContinuation>(0, handler_stub_loc);
 

@@ -285,7 +285,7 @@ public:
         return load_base;
     }
 
-    // pair<LIBRARY_NID, {<OBJECT_NID, stub_offset>}>
+    // pair<LIBRARY_NID, {<OBJECT_NID, stub_va>}>
     std::vector<std::pair<uint32_t, std::vector<std::pair<uint32_t, uint32_t>>>> get_imports() const
     {
         assert(ifs);
@@ -319,16 +319,15 @@ public:
             for (auto &entry : tables)
             {
                 uint32_t nid;
-                uint32_t off;
+                uint32_t va;
                 for (auto i = 0; i < entry.first; i++)
                 {
                     assert(ifs);
                     ifs.seekg(va2off(entry.second.first) + i * sizeof(uint32_t), std::ios::beg);
                     ifs.read((char *)&nid, sizeof(uint32_t));
-                    ifs.seekg(va2off(entry.second.second) + i * sizeof(uint32_t), std::ios::beg);
-                    ifs.read((char *)&off, sizeof(uint32_t));
+                    va = entry.second.second + i * sizeof(uint32_t);
 
-                    nids.push_back(std::make_pair(nid, off));
+                    nids.push_back(std::make_pair(nid, va));
                 }
             }
             out.push_back(std::make_pair(library_nid, nids));
