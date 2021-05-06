@@ -222,7 +222,8 @@ ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Native::start(uint32_t 
 
 ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Native::join(uint32_t *retval)
 {
-    auto err = pthread_join(m_thread, (void **)&retval);
+    void *thread_retval;
+    auto err = pthread_join(m_thread, &thread_retval);
     if (err == 0 || err == EINVAL)
     {
         if (m_result == THREAD_EXECUTION_RESULT::STOP_UNTIL_POINT_HIT && retval != nullptr)
