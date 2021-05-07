@@ -41,10 +41,6 @@ else()
     list(APPEND CMAKE_REQUIRED_LIBRARIES ${CMAKE_DL_LIBS})
     check_symbol_exists(dlmopen "dlfcn.h" HAVE_DLMOPEN)
 
-    if (NOT "${HAVE_DLMOPEN}")
-        unset(HAVE_DLMOPEN CACHE)
-        message(FATAL_ERROR "dlmopen is missing, cannot continue")
-    endif()
     target_link_libraries(psp2cldr PRIVATE ${CMAKE_DL_LIBS})
 
     while (TRUE)

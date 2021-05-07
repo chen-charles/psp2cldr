@@ -22,9 +22,9 @@ Loading *userspace* PSP2 VELFs.
 
 ## Supplementary ELFs
 **psp2cldr** provides a mechanism to load supplementary ELFs into the address space of the target.  
-Supplementary ELFs need to be built for the target platform, with the following options: `-fPIC`, `-shared`, `-nostdlib` and `--hash-style=sysv`.  
+Supplementary ELFs need to be built for the target platform, with the following options: `-fPIC`, `-shared`, `-nostdlib`, `-lgcc` and `--hash-style=sysv`.  
 ```bash
-arm-vita-eabi-gcc -shared -o libyours.so -Wl,--hash-style=sysv,--whole-archive libyours.a -nostdlib
+arm-vita-eabi-gcc -shared -o libyours.so -Wl,--hash-style=sysv,--whole-archive libyours.a -nostdlib -lgcc
 ```
 Newlib has been compiled [here](https://github.com/chen-charles/psp2cldr-newlib/releases) (all syscalls should be provided from the providers). `thread_basic*` can be tested with the sample dynamic implementation.  
 Note: `DT_NEEDED` tag is respected.  
