@@ -157,6 +157,9 @@ public:
     // ELF/VELF dependency search paths
     std::vector<std::string> search_paths;
 
+    // velf fullname provided to psp2cldr, kept for provider's reference
+    std::string main_velf_fullname;
+
     std::unordered_map<NID_t, std::string> nid_to_filename;
 
 public:

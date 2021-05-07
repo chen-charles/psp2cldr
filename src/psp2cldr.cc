@@ -302,6 +302,7 @@ order of supplying <nid_implementation_libraries> matters, the first observance 
 
     Coordinator_Impl coord;
     LoadContext ctx_load(pool);
+    ctx_load.main_velf_fullname = velf_path.string();
     ctx_load.search_paths = search_paths;
 
     bool succ = true;
