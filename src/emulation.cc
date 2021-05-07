@@ -108,10 +108,17 @@ int UnicornEngineARM::munmap(uintptr_t addr, size_t length)
 
 ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Unicorn::start(uint32_t from, uint32_t until)
 {
-    std::lock_guard lock(m_state_lock);
-
-    if (m_state != THREAD_EXECUTION_STATE::UNSTARTED)
+    switch (m_state)
+    {
+    case THREAD_EXECUTION_STATE::UNSTARTED:
+    case THREAD_EXECUTION_STATE::RESTARTABLE:
+        break;
+    default:
         return ExecutionThread::THREAD_EXECUTION_RESULT::START_FAILED;
+    }
+
+    if (m_thread.joinable())
+        m_thread.join();
 
     if (from & 1) // thumb
         (*this)[RegisterAccessProxy::Register::CPSR]->w((*this)[RegisterAccessProxy::Register::CPSR]->r() | (1 << 5));
@@ -119,22 +126,25 @@ ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Unicorn::start(uint32_t
         (*this)[RegisterAccessProxy::Register::CPSR]->w((*this)[RegisterAccessProxy::Register::CPSR]->r() & (~(1 << 5)));
 
     m_state = THREAD_EXECUTION_STATE::RUNNING;
+
     m_thread = std::thread(
         [=]() {
             auto err = uc_emu_start(m_engine, from, until, 0, 0);
             {
-                std::lock_guard lock(m_state_lock);
-                m_state = THREAD_EXECUTION_STATE::EXITED;
                 if (m_stop_called)
                 {
+                    // unsafe to restart?
+                    m_state = THREAD_EXECUTION_STATE::EXITED;
                     m_result = THREAD_EXECUTION_RESULT::STOP_CALLED;
                 }
                 else if (err == UC_ERR_OK)
                 {
+                    m_state = THREAD_EXECUTION_STATE::RESTARTABLE;
                     m_result = THREAD_EXECUTION_RESULT::STOP_UNTIL_POINT_HIT;
                 }
                 else
                 {
+                    m_state = THREAD_EXECUTION_STATE::EXITED;
                     m_result = THREAD_EXECUTION_RESULT::STOP_ERRORED;
                 }
             }
@@ -146,12 +156,11 @@ ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Unicorn::start(uint32_t
 ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Unicorn::join(uint32_t *retval)
 {
     {
-        std::lock_guard lock(m_state_lock);
         switch (m_state)
         {
         case THREAD_EXECUTION_STATE::UNSTARTED:
             return ExecutionThread::THREAD_EXECUTION_RESULT::JOIN_FAILED;
-        case THREAD_EXECUTION_STATE::EXITED:
+        case THREAD_EXECUTION_STATE::RESTARTABLE:
             if (retval != nullptr)
                 *retval = (*this)[RegisterAccessProxy::Register::R0]->r();
             return m_result;
@@ -162,7 +171,6 @@ ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Unicorn::join(uint32_t 
     {
         m_thread.join();
         {
-            std::lock_guard lock(m_state_lock);
             if (m_result == THREAD_EXECUTION_RESULT::STOP_UNTIL_POINT_HIT && retval != nullptr)
                 *retval = (*this)[RegisterAccessProxy::Register::R0]->r();
 

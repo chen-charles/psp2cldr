@@ -163,6 +163,11 @@ public:
     std::unordered_map<NID_t, std::string> nid_to_filename;
 
 public:
+    // target routines to be called per thread
+    std::vector<uint32_t> thread_init_routines;
+    std::vector<uint32_t> thread_fini_routines;
+
+public:
     /* loader context */
     std::shared_mutex unimplemented_targets_mutex;
     std::unordered_map<uint32_t, import_stub_entry> unimplemented_targets; // unresolved import location, import_stub_entry

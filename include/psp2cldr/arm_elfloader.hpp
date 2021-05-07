@@ -571,7 +571,7 @@ public:
         return needed;
     }
 
-    // pair<sym, stub_offset>
+    // pair<sym, stub_va>
     std::vector<std::pair<Elf32_Sym, uint32_t>> get_exports() const
     {
         std::vector<std::pair<Elf32_Sym, uint32_t>> out;

@@ -174,7 +174,6 @@ DEFINE_VITA_IMP_SYM_EXPORT(basic_test_variable)
 }
 
 std::unordered_map<uint32_t, std::weak_ptr<ExecutionThread>> threads;
-uint32_t thread_id_ctr = 1;
 std::mutex threads_lock;
 
 DECLARE_VITA_IMP_NID_EXPORT(CAE9ACE6, C5C11EE7, sceKernelCreateThread)
@@ -182,19 +181,49 @@ DEFINE_VITA_IMP_NID_EXPORT(CAE9ACE6, C5C11EE7)
 {
     DECLARE_VITA_IMP_TYPE(FUNCTION);
 
-    auto thread = ctx->coord.thread_create();
-    (*thread)[RegisterAccessProxy::Register::IP]->w(PARAM(ctx, 1)); // we will store this in IP, start thread will use this value as PC
-    (*thread)[RegisterAccessProxy::Register::SP]->w(ctx->coord.mmap(0, PARAM(ctx, 3)) + PARAM(ctx, 3));
-    (*thread)[RegisterAccessProxy::Register::LR]->w(ctx->coord.mmap(0, 0x1000));
+    uint32_t new_pc = PARAM_1;
+    uint32_t new_stacksz = PARAM_3;
 
-    uint32_t threadID;
+    static const size_t stack_sz = 0x4000;
+    uint32_t sp_base = ctx->coord.mmap(0, stack_sz);
+    uint32_t sp = sp_base + stack_sz;
+    uint32_t lr = ctx->coord.mmap(0, 0x1000);
+
+    size_t succ_counter = 0;
+    auto thread = ctx->coord.thread_create();
+    for (auto &la : ctx->load.thread_init_routines)
+    {
+        (*thread)[RegisterAccessProxy::Register::SP]->w(sp);
+        (*thread)[RegisterAccessProxy::Register::LR]->w(lr);
+
+        uint32_t result;
+        if (thread->start(la, lr) != ExecutionThread::THREAD_EXECUTION_RESULT::OK || (*thread).join(&result) != ExecutionThread::THREAD_EXECUTION_RESULT::STOP_UNTIL_POINT_HIT || result != 0)
+            break;
+        if (sp != (*thread)[RegisterAccessProxy::Register::SP]->r())
+        {
+            std::cout << "sceKernelCreateThread: stack corruption during thread init routines" << std::endl;
+            HANDLER_RETURN(1);
+        }
+
+        succ_counter++;
+    }
+    if (succ_counter != ctx->load.thread_init_routines.size())
+    {
+        std::cout << "sceKernelCreateThread: thread init routines failed" << std::endl;
+        HANDLER_RETURN(2);
+    }
+    ctx->coord.munmap(sp_base, stack_sz);
+
+    (*thread)[RegisterAccessProxy::Register::SP]->w(ctx->coord.mmap(0, new_stacksz) + new_stacksz);
+    (*thread)[RegisterAccessProxy::Register::LR]->w(lr);
+    (*thread)[RegisterAccessProxy::Register::IP]->w(new_pc); // we will store this in IP, start thread will use this value as PC
+
     {
         std::lock_guard<std::mutex> guard{threads_lock};
-        threadID = thread_id_ctr++;
-        threads[threadID] = thread;
+        threads[thread->tid()] = thread;
     }
 
-    TARGET_RETURN(threadID);
+    TARGET_RETURN(thread->tid());
     HANDLER_RETURN(0);
 }
 
@@ -206,11 +235,11 @@ DEFINE_VITA_IMP_NID_EXPORT(CAE9ACE6, F08DE149)
     uint32_t pp_args = PARAM(ctx, 2);
     {
         std::lock_guard<std::mutex> guard{threads_lock};
-        if (auto ptr = threads[PARAM(ctx, 0)].lock())
+        if (auto thread = threads[PARAM(ctx, 0)].lock())
         {
-            (*ptr)[RegisterAccessProxy::Register::R0]->w(PARAM(ctx, 1));
-            (*ptr)[RegisterAccessProxy::Register::R1]->w(PARAM(ctx, 2));
-            ptr->start((*ptr)[RegisterAccessProxy::Register::IP]->r(), (*ptr)[RegisterAccessProxy::Register::LR]->r());
+            (*thread)[RegisterAccessProxy::Register::R0]->w(PARAM(ctx, 1));
+            (*thread)[RegisterAccessProxy::Register::R1]->w(PARAM(ctx, 2));
+            thread->start((*thread)[RegisterAccessProxy::Register::IP]->r(), (*thread)[RegisterAccessProxy::Register::LR]->r());
         }
     }
 
@@ -222,13 +251,51 @@ DECLARE_VITA_IMP_NID_EXPORT(859A24B1, 1BBDE3D9, sceKernelDeleteThread)
 DEFINE_VITA_IMP_NID_EXPORT(859A24B1, 1BBDE3D9)
 {
     DECLARE_VITA_IMP_TYPE(FUNCTION);
+
+    uint32_t threadID = PARAM_0;
+    if (auto thread = threads[threadID].lock())
     {
-        std::lock_guard<std::mutex> guard{threads_lock};
-        if (auto ptr = threads[PARAM_0].lock())
+        if (thread->state() != ExecutionThread::THREAD_EXECUTION_STATE::RESTARTABLE)
         {
-            ctx->coord.thread_destory(ptr);
+            std::cout << "sceKernelDeleteThread: is the thread in RESTARTABLE state?" << std::endl;
+            HANDLER_RETURN(3);
         }
-        threads.erase(PARAM_0);
+
+        static const size_t stack_sz = 0x4000;
+        uint32_t sp_base = ctx->coord.mmap(0, stack_sz);
+        uint32_t sp = sp_base + stack_sz;
+        uint32_t lr = (*thread)[RegisterAccessProxy::Register::PC]->r(); // assuming UNTIL_POINT_HIT
+
+        size_t succ_counter = 0;
+        for (auto &la : ctx->load.thread_fini_routines)
+        {
+            (*thread)[RegisterAccessProxy::Register::SP]->w(sp);
+            (*thread)[RegisterAccessProxy::Register::LR]->w(lr);
+
+            uint32_t result;
+            if (thread->start(la, lr) != ExecutionThread::THREAD_EXECUTION_RESULT::OK || (*thread).join(&result) != ExecutionThread::THREAD_EXECUTION_RESULT::STOP_UNTIL_POINT_HIT || result != 0)
+                break;
+            if (sp != (*thread)[RegisterAccessProxy::Register::SP]->r())
+            {
+                std::cout << "sceKernelDeleteThread: stack corruption during thread fini routines" << std::endl;
+                HANDLER_RETURN(1);
+            }
+
+            succ_counter++;
+        }
+        if (succ_counter != ctx->load.thread_fini_routines.size())
+        {
+            std::cout << "sceKernelDeleteThread: thread fini routines failed" << std::endl;
+            HANDLER_RETURN(2);
+        }
+        ctx->coord.munmap(sp_base, stack_sz);
+        ctx->coord.munmap(lr, 0x1000);
+
+        {
+            std::lock_guard<std::mutex> guard{threads_lock};
+            threads.erase(threadID);
+        }
+        ctx->coord.thread_destory(thread);
     }
 
     TARGET_RETURN(0);
@@ -246,3 +313,40 @@ DEFINE_VITA_IMP_NID_EXPORT(859A24B1, 4B675D05)
 }
 
 VITA_IMP_NID_FORWARD_SYM(CAE9ACE6, FA26BC62, "printf")
+
+#undef __psp2cldr__internal_tls_ctrl
+DEFINE_VITA_IMP_SYM_EXPORT(__psp2cldr__internal_tls_ctrl)
+{
+    DECLARE_VITA_IMP_TYPE(FUNCTION);
+    /*
+    0: retrieve tls ptr
+    1: free tls
+    */
+
+    auto ctrl = PARAM_0;
+    static std::unordered_map<uint32_t, uint32_t> mapping;
+    static std::mutex _mutex;
+    auto tid = ctx->thread.tid();
+
+    std::lock_guard guard(_mutex);
+    switch (ctrl)
+    {
+    case 0:
+        if (mapping.count(tid) == 0)
+            mapping[tid] = ctx->coord.mmap(0, 0x1000);
+        TARGET_RETURN(mapping[tid]);
+        HANDLER_RETURN(0);
+    case 1:
+        if (mapping.count(tid) == 0)
+        {
+            HANDLER_RETURN(1);
+        }
+        ctx->coord.munmap(mapping[tid], 0x1000);
+        mapping.erase(tid);
+        TARGET_RETURN(0);
+        HANDLER_RETURN(0);
+        break;
+    default:
+        HANDLER_RETURN(2);
+    }
+}

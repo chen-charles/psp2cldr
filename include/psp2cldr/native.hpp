@@ -65,6 +65,8 @@ protected:
 
 class InterruptContext;
 class NativeEngineARM;
+void _sig_handler(int sig, siginfo_t *info, void *ucontext);
+void *thread_bootstrap(ExecutionThread_Native *thread);
 class ExecutionThread_Native : public ExecutionThread
 {
 public:
@@ -76,10 +78,15 @@ public:
         m_intr_callback = callback;
     }
 
+    virtual const std::atomic<THREAD_EXECUTION_STATE> &state() const
+    {
+        return m_state;
+    }
+
     virtual THREAD_EXECUTION_RESULT start(uint32_t from, uint32_t until);
     virtual THREAD_EXECUTION_RESULT join(uint32_t *retval);
     virtual void stop(uint32_t retval);
-    virtual pthread_t id() const { return m_thread; }
+    virtual pthread_t pthread_id() const { return m_thread; }
 
 public:
     virtual std::shared_ptr<RegisterAccessProxy> operator[](RegisterAccessProxy::Register name)
@@ -102,6 +109,7 @@ protected:
     std::atomic<bool> m_stop_called{false};
     uint32_t m_until_point_instr_backup{0};
 
+    std::atomic<THREAD_EXECUTION_STATE> m_state{THREAD_EXECUTION_STATE::UNSTARTED};
     std::atomic<bool> m_started{false};
     std::atomic<bool> m_handling_interrupt{false};
     std::atomic<THREAD_EXECUTION_RESULT> m_result;
@@ -115,9 +123,8 @@ protected:
     // friends: m_target_ctx should only be modified by const types
     friend class NativeMemoryAccessProxy;
     friend class RegisterAccessProxy_Native;
-    friend class NativeEngineARM;
-
-    static void *thread_bootstrap(ExecutionThread_Native *thread);
+    friend void _sig_handler(int sig, siginfo_t *info, void *ucontext);
+    friend void *thread_bootstrap(ExecutionThread_Native *thread);
 };
 
 class NativeEngineARM : public ExecutionCoordinator
@@ -150,8 +157,9 @@ protected:
     MemoryAllocator m_allocator;
 
 protected:
-    static void _sig_handler(int sig, siginfo_t *info, void *ucontext);
     std::function<void(ExecutionCoordinator &, ExecutionThread &, uint32_t)> m_intr_callback = {};
+    friend void _sig_handler(int sig, siginfo_t *info, void *ucontext);
+    friend void *thread_bootstrap(ExecutionThread_Native *thread);
 
     virtual void panic_dump_impl(std::shared_ptr<spdlog::logger> logger, int code = 0);
 

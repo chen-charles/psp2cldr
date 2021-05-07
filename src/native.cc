@@ -35,7 +35,7 @@ static char do_return_stack[DO_RETURN_STACK_SZ] __attribute__((aligned(16)));
     __builtin_unreachable();
 }
 
-void NativeEngineARM::_sig_handler(int sig, siginfo_t *info, void *ucontext)
+void _sig_handler(int sig, siginfo_t *info, void *ucontext)
 {
     static NativeEngineARM *coord = NULL;
     if (info->si_code == SI_QUEUE && info->si_value.sival_ptr != NULL)
@@ -55,7 +55,7 @@ void NativeEngineARM::_sig_handler(int sig, siginfo_t *info, void *ucontext)
     for (auto &thread : coord->m_threads)
     {
         auto casted = std::dynamic_pointer_cast<ExecutionThread_Native>(thread);
-        if (pthread_equal(casted->id(), thread_id))
+        if (pthread_equal(casted->pthread_id(), thread_id))
         {
             exec_thread = casted;
             break;
@@ -110,9 +110,9 @@ ExecutionThread_Native::ExecutionThread_Native(ExecutionCoordinator &coord) : m_
         throw std::runtime_error("getcontext failed");
 }
 
-void *ExecutionThread_Native::thread_bootstrap(ExecutionThread_Native *thread)
+void *thread_bootstrap(ExecutionThread_Native *thread)
 {
-    ExecutionThread::THREAD_EXECUTION_RESULT result = THREAD_EXECUTION_RESULT::START_FAILED;
+    ExecutionThread::THREAD_EXECUTION_RESULT result = ExecutionThread::THREAD_EXECUTION_RESULT::START_FAILED;
 
     /* HAX, but at least it's better than sigsetjmp */
     if (getcontext(&thread->m_return_ctx) == 0)
@@ -138,7 +138,7 @@ void *ExecutionThread_Native::thread_bootstrap(ExecutionThread_Native *thread)
 _execute_signal_callback:
     if (thread->m_stop_called)
     {
-        result = THREAD_EXECUTION_RESULT::STOP_CALLED;
+        result = ExecutionThread::THREAD_EXECUTION_RESULT::STOP_CALLED;
         goto _done;
     }
 
@@ -152,7 +152,7 @@ _execute_signal_callback:
             if (thread->m_stop_called)
             {
                 LOG(TRACE, "execute: stop() called, done");
-                result = THREAD_EXECUTION_RESULT::STOP_CALLED;
+                result = ExecutionThread::THREAD_EXECUTION_RESULT::STOP_CALLED;
             }
             else
             {
@@ -163,14 +163,14 @@ _execute_signal_callback:
 
                 setcontext(&thread->m_target_ctx); // no return, or it failed
 
-                result = THREAD_EXECUTION_RESULT::STOP_ERRORED;
+                result = ExecutionThread::THREAD_EXECUTION_RESULT::STOP_ERRORED;
             }
         }
         else
         {
             LOG(TRACE, "execute: unexpected interrupt, stopping");
             thread->stop(1);
-            result = THREAD_EXECUTION_RESULT::STOP_ERRORED;
+            result = ExecutionThread::THREAD_EXECUTION_RESULT::STOP_ERRORED;
         }
     }
     else
@@ -178,7 +178,7 @@ _execute_signal_callback:
         LOG(TRACE, "execute: STOP_UNTIL_POINT_HIT, done");
 
         thread->m_started = false;
-        result = THREAD_EXECUTION_RESULT::STOP_UNTIL_POINT_HIT;
+        result = ExecutionThread::THREAD_EXECUTION_RESULT::STOP_UNTIL_POINT_HIT;
     }
 
 _done:
@@ -187,12 +187,24 @@ _done:
 
     thread->m_started = false;
     thread->m_handling_interrupt = false;
+    thread->m_state = ExecutionThread::THREAD_EXECUTION_STATE::RESTARTABLE;
     thread->m_stoppable = false;
     return NULL;
 }
 
 ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Native::start(uint32_t from, uint32_t until)
 {
+    switch (m_state)
+    {
+    case THREAD_EXECUTION_STATE::UNSTARTED:
+    case THREAD_EXECUTION_STATE::RESTARTABLE:
+        break;
+    default:
+        return ExecutionThread::THREAD_EXECUTION_RESULT::START_FAILED;
+    }
+
+    join(nullptr);
+
     (*this)[RegisterAccessProxy::Register::PC]->w(from);
 
     static const uint32_t INSTR_UDF0_ARM = 0xe7f000f0;
@@ -216,20 +228,24 @@ ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Native::start(uint32_t 
         throw std::runtime_error("pthread_create failed");
     }
 
+    m_state = THREAD_EXECUTION_STATE::RUNNING;
     m_stoppable = true;
     return THREAD_EXECUTION_RESULT::OK;
 }
 
 ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Native::join(uint32_t *retval)
 {
-    void *thread_retval;
-    auto err = pthread_join(m_thread, &thread_retval);
-    if (err == 0 || err == EINVAL)
+    if (m_state != THREAD_EXECUTION_STATE::UNSTARTED)
     {
-        if (m_result == THREAD_EXECUTION_RESULT::STOP_UNTIL_POINT_HIT && retval != nullptr)
-            *retval = (*this)[RegisterAccessProxy::Register::R0]->r();
+        void *thread_retval;
+        auto err = pthread_join(m_thread, &thread_retval);
+        if (err == 0 || err == EINVAL)
+        {
+            if (m_result == THREAD_EXECUTION_RESULT::STOP_UNTIL_POINT_HIT && retval != nullptr)
+                *retval = (*this)[RegisterAccessProxy::Register::R0]->r();
 
-        return m_result;
+            return m_result;
+        }
     }
     return THREAD_EXECUTION_RESULT::JOIN_FAILED;
 }

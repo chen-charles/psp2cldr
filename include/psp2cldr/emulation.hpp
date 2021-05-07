@@ -98,6 +98,11 @@ public:
         m_intr_callback = callback;
     }
 
+    virtual const std::atomic<THREAD_EXECUTION_STATE> &state() const
+    {
+        return m_state;
+    }
+
     virtual THREAD_EXECUTION_RESULT start(uint32_t from, uint32_t until);
     virtual THREAD_EXECUTION_RESULT join(uint32_t *retval);
     virtual void stop(uint32_t retval);
@@ -127,9 +132,8 @@ protected:
     uc_hook m_hook_insn_invalid;
     uc_hook m_hook_mem_invalid;
 
-    THREAD_EXECUTION_STATE m_state{THREAD_EXECUTION_STATE::UNSTARTED};
+    std::atomic<THREAD_EXECUTION_STATE> m_state{THREAD_EXECUTION_STATE::UNSTARTED};
     THREAD_EXECUTION_RESULT m_result;
-    std::mutex m_state_lock;
     std::atomic<bool> m_stop_called = false;
 
     std::thread m_thread;

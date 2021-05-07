@@ -15,6 +15,18 @@ class InterruptContext;
 class ExecutionCoordinator;
 class ExecutionThread : public PanicDumpable
 {
+private:
+    static inline std::atomic<uint32_t> _id_ctr = 1;
+    mutable uint32_t m_tid = 0;
+
+public:
+    uint32_t tid() const
+    {
+        if (m_tid == 0)
+            return m_tid = _id_ctr ++;
+        return m_tid;
+    }
+
 public:
     ExecutionThread() {}
     virtual ~ExecutionThread() {}
@@ -24,9 +36,8 @@ public:
     {
         UNSTARTED,
         RUNNING,
-        PENDING, // ready for execution
-        BLOCKED, // blocked waiting for signalling
-        EXITED   // died, will never leave this state
+        RESTARTABLE,
+        EXITED // died, will never leave this state
     };
     // thread is not accessible when it's running
     // we can attempt to wait for the thread to become inspect-able
@@ -41,6 +52,7 @@ public:
         STOP_ERRORED
     };
 
+    virtual const std::atomic<THREAD_EXECUTION_STATE> &state() const = 0;
     virtual THREAD_EXECUTION_RESULT start(uint32_t from, uint32_t until) = 0;
     virtual THREAD_EXECUTION_RESULT join(uint32_t *retval = nullptr) = 0; // retval is set iff result is STOP_UNTIL_POINT_HIT
     virtual void stop(uint32_t retval = 0) = 0;

@@ -76,21 +76,27 @@ static int call_init_routines(std::vector<uintptr_t> init_routines, LoadContext 
     uint32_t sp = sp_base + stack_sz;
     uint32_t lr = coordinator.mmap(0, 0x1000);
 
-    int succ_counter = 0;
+    size_t succ_counter = 0;
+    auto thread = coordinator.thread_create();
     for (auto &la : init_routines)
     {
         LOG(DEBUG, "calling init_routine at {:#010x}, until {:#010x}", la, lr);
-        auto thread = coordinator.thread_create();
+
         (*thread)[RegisterAccessProxy::Register::SP]->w(sp);
         (*thread)[RegisterAccessProxy::Register::LR]->w(lr);
 
-        uint32_t init_result;
-        bool failed = thread->start(la, lr) != ExecutionThread::THREAD_EXECUTION_RESULT::OK || (*thread).join(&init_result) != ExecutionThread::THREAD_EXECUTION_RESULT::STOP_UNTIL_POINT_HIT || init_result != 0;
-        coordinator.thread_destory(thread);
-        if (failed)
+        uint32_t result;
+        if (thread->start(la, lr) != ExecutionThread::THREAD_EXECUTION_RESULT::OK || (*thread).join(&result) != ExecutionThread::THREAD_EXECUTION_RESULT::STOP_UNTIL_POINT_HIT || result != 0)
             break;
+        if (sp != (*thread)[RegisterAccessProxy::Register::SP]->r())
+        {
+            LOG(WARN, "thread stack corruption detected");
+            break;
+        }
+
         succ_counter++;
     }
+    coordinator.thread_destory(thread);
 
     coordinator.munmap(sp_base, stack_sz);
     coordinator.munmap(lr, 0x1000);
@@ -278,7 +284,9 @@ int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinato
     if (!module_start)
         throw std::runtime_error("module_start is not exported");
 
+    init_routines.insert(init_routines.end(), ctx.thread_init_routines.begin(), ctx.thread_init_routines.end());
     init_routines.push_back(module_start);
+    init_routines.insert(init_routines.end(), ctx.thread_fini_routines.begin(), ctx.thread_fini_routines.end());
 
     if (call_init_routines(init_routines, ctx, coordinator) != init_routines.size())
     {
@@ -325,8 +333,8 @@ static void install_sym_stub(LoadContext &ctx, ExecutionCoordinator &coordinator
         stub_location = ptr_f;
     }
 
-    if (ptr_f & 1)
-        proxy.w<uint32_t>(stub_location, INSTR_UDF0_THM);
+    if (stub_location & 1)
+        proxy.w<uint32_t>(stub_location & (~1), INSTR_UDF0_THM);
     else
         proxy.w<uint32_t>(stub_location, INSTR_UDF0_ARM);
 
@@ -419,8 +427,37 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
         }
     }
 
+    LOG(DEBUG, "checking exports for provider overrides");
+    auto exps = elf.get_exports();
+    for (auto &exp : exps)
+    {
+        std::string exp_name{elf.getstr(exp.first.st_name)};
+        auto ptr_f = elf.va2la(exp.second, load_base);
+
+        if (ctx.provider() && ctx.provider()->get(exp_name))
+        {
+            auto type_of_import = ctx.provider()->get(exp_name)(nullptr)->result();
+
+            if (type_of_import == ProviderPokeResult::VARIABLE)
+            {
+                throw std::logic_error("cannot override variables, because the symbol only holds a pointer value");
+            }
+            else
+            {
+                install_sym_stub(ctx, coordinator, exp_name, exp.first, ptr_f, true, [](std::string name, Elf32_Sym sym, InterruptContext *ctx) {
+                    return ctx->load.provider()->get(name.c_str())(ctx);
+                });
+            }
+        }
+    }
+
+    init_routines.insert(init_routines.end(), ctx.thread_init_routines.begin(), ctx.thread_init_routines.end());
+
     auto elf_init_routines = elf.get_init_routines(proxy, load_base);
     std::move(elf_init_routines.begin(), elf_init_routines.end(), std::back_inserter(init_routines));
+
+    init_routines.insert(init_routines.end(), ctx.thread_fini_routines.begin(), ctx.thread_fini_routines.end());
+
     if (call_init_routines(init_routines, ctx, coordinator) != init_routines.size())
     {
         LOG(ERROR, "module load failed because init_routine failed");
@@ -429,7 +466,6 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
 
     std::vector<std::pair<std::string, std::pair<Elf32_Sym, uint32_t>>> to_export;
     LOG(DEBUG, "exporting exports");
-    auto exps = elf.get_exports();
     for (auto &exp : exps)
     {
         auto exp_name = elf.getstr(exp.first.st_name);
@@ -444,13 +480,20 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
                 return 5;
             }
         }
+
         to_export.push_back(std::make_pair(exp_name, std::make_pair(exp.first, ptr_f)));
     }
 
     ctx.libs_loaded.insert(filename);
     for (auto &entry : to_export)
     {
-        if (entry.first == "_start")
+        static const char *MAGIC_thread_init = "__psp2cldr_init_";
+        static const char *MAGIC_thread_fini = "__psp2cldr_fini_";
+        if (entry.first.rfind(MAGIC_thread_init, 0) == 0)
+            ctx.thread_init_routines.push_back(entry.second.second);
+        else if (entry.first.rfind(MAGIC_thread_fini, 0) == 0)
+            ctx.thread_fini_routines.push_back(entry.second.second);
+        else if (entry.first == "_start")
         {
             /* make sure _exit is not called, otherwise newlib shuts down */
             LOG(WARN, "ELF \"{}\" is exporting \"_start\", is it compiled as an executable instead of a shared library?", filename);
