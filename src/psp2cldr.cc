@@ -39,8 +39,7 @@ options: \n\
 each of <nid_implementation_libraries> is one of the followings: \n\
     1. <dll>: a DLL \n\
     2. --querydll <dll>: a DLL using Query interface \n\
-    3. --static: using statically linked implementation \n\
-    4. <directory>: a directory of <dll>, searched recursively \n\
+    3. <directory>: a directory of <dll>, searched recursively \n\
 order of supplying <nid_implementation_libraries> matters, the first observance of an implementation will override the next one.\n\
 "};
         console->info(usage_str);
@@ -111,12 +110,6 @@ order of supplying <nid_implementation_libraries> matters, the first observance 
     {
         if (argv[i][0] == '-') // argv[i][0] == 0 if the string is empty
         {
-            if (strcmp(argv[i], "--static") == 0)
-            {
-                pool->add_provider(std::make_shared<Provider_StaticallyLinkedLibrary>());
-                continue;
-            }
-
             if (strcmp(argv[i], "--querydll") == 0)
             {
                 if (i != argc - 1)
@@ -237,6 +230,7 @@ order of supplying <nid_implementation_libraries> matters, the first observance 
             LOG(WARN, "{} is not a regular file, skipped", argv[i]);
         }
     }
+    pool->add_provider(std::make_shared<Provider_StaticallyLinkedLibrary>());
 
     while (delta_verbosity)
     {
