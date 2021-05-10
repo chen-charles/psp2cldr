@@ -86,7 +86,7 @@ static int call_init_routines(std::vector<uintptr_t> init_routines, LoadContext 
         (*thread)[RegisterAccessProxy::Register::LR]->w(lr);
 
         uint32_t result;
-        if (thread->start(la, lr) != ExecutionThread::THREAD_EXECUTION_RESULT::OK || (*thread).join(&result) != ExecutionThread::THREAD_EXECUTION_RESULT::STOP_UNTIL_POINT_HIT || result != 0)
+        if (thread->start(la, lr) != ExecutionThread::THREAD_EXECUTION_RESULT::OK || (*thread).join(&result) != ExecutionThread::THREAD_EXECUTION_RESULT::STOP_UNTIL_POINT_HIT)
             break;
         if (sp != (*thread)[RegisterAccessProxy::Register::SP]->r())
         {
@@ -421,8 +421,18 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
         {
             // TODO: remove, since the importer does not know if the stub is installed on a ptr to a variable
             install_sym_stub(ctx, coordinator, sym_name, imp.first, ptr_f, false, [](std::string name, Elf32_Sym sym, InterruptContext *ctx) {
-                LOG(CRITICAL, "import stub for {} is hit, unimplemented", name);
-                return std::make_shared<HandlerResult>(1);
+                if (ctx->load.libs_export_locations.count(name) == 0)
+                {
+                    LOG(CRITICAL, "import stub for {} is hit, unimplemented", name);
+                    return std::make_shared<HandlerResult>(1);
+                }
+                else
+                {
+                    return std::dynamic_pointer_cast<HandlerResult>(ctx->handler_call_target_function(name)->then([](uint32_t result, InterruptContext *ctx) {
+                        ctx->thread[RegisterAccessProxy::Register::PC]->w(ctx->thread[RegisterAccessProxy::Register::LR]->r());
+                        return std::make_shared<HandlerResult>(0);
+                    }));
+                }
             });
         }
     }
