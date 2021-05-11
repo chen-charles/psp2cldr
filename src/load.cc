@@ -420,7 +420,7 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
         }
         else
         {
-            if (ELF32_ST_BIND(sym.st_info) & STB_WEAK)
+            if (ELF32_ST_BIND(sym.st_info) == STB_WEAK)
                 ;
             else
                 // TODO: remove, since the importer does not know if the stub is installed on a ptr to a variable
@@ -482,20 +482,24 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
     LOG(DEBUG, "exporting exports");
     for (auto &exp : exps)
     {
-        auto exp_name = elf.getstr(exp.first.st_name);
+        auto sym = exp.first;
+        auto exp_name = elf.getstr(sym.st_name);
         auto ptr_f = elf.va2la(exp.second, load_base);
         if (ctx.libs_export_locations.count(exp_name) != 0)
         {
             auto prev_entry = ctx.libs_export_locations[exp_name];
-            auto Sym = prev_entry.first;
-            if (ELF32_ST_VISIBILITY(Sym.st_other) == STV_PROTECTED)
+            auto prev_sym = prev_entry.first;
+            if (ELF32_ST_VISIBILITY(prev_sym.st_other) == STV_PROTECTED)
             {
                 LOG(ERROR, "module load failed because a protected symbol is being preempted");
                 return 5;
             }
         }
 
-        to_export.push_back(std::make_pair(exp_name, std::make_pair(exp.first, ptr_f)));
+        if (ELF32_ST_BIND(sym.st_info) != STB_LOCAL)
+        {
+            to_export.push_back(std::make_pair(exp_name, std::make_pair(sym, ptr_f)));
+        }
     }
 
     ctx.libs_loaded.insert(filename);
