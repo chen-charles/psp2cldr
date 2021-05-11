@@ -84,6 +84,7 @@ static int call_init_routines(std::vector<uintptr_t> init_routines, LoadContext 
 
         (*thread)[RegisterAccessProxy::Register::SP]->w(sp);
         (*thread)[RegisterAccessProxy::Register::LR]->w(lr);
+        (*thread)[RegisterAccessProxy::Register::R0]->w(0);
 
         uint32_t result;
         if (thread->start(la, lr) != ExecutionThread::THREAD_EXECUTION_RESULT::OK || (*thread).join(&result) != ExecutionThread::THREAD_EXECUTION_RESULT::STOP_UNTIL_POINT_HIT)
