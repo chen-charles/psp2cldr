@@ -419,21 +419,24 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
         }
         else
         {
-            // TODO: remove, since the importer does not know if the stub is installed on a ptr to a variable
-            install_sym_stub(ctx, coordinator, sym_name, imp.first, ptr_f, false, [](std::string name, Elf32_Sym sym, InterruptContext *ctx) {
-                if (ctx->load.libs_export_locations.count(name) == 0)
-                {
-                    LOG(CRITICAL, "import stub for {} is hit, unimplemented", name);
-                    return std::make_shared<HandlerResult>(1);
-                }
-                else
-                {
-                    return std::dynamic_pointer_cast<HandlerResult>(ctx->handler_call_target_function(name)->then([](uint32_t result, InterruptContext *ctx) {
-                        ctx->thread[RegisterAccessProxy::Register::PC]->w(ctx->thread[RegisterAccessProxy::Register::LR]->r());
-                        return std::make_shared<HandlerResult>(0);
-                    }));
-                }
-            });
+            if (ELF32_ST_BIND(sym.st_info) & STB_WEAK)
+                ;
+            else
+                // TODO: remove, since the importer does not know if the stub is installed on a ptr to a variable
+                install_sym_stub(ctx, coordinator, sym_name, imp.first, ptr_f, false, [](std::string name, Elf32_Sym sym, InterruptContext *ctx) {
+                    if (ctx->load.libs_export_locations.count(name) == 0)
+                    {
+                        LOG(CRITICAL, "import stub for {} is hit, unimplemented", name);
+                        return std::make_shared<HandlerResult>(1);
+                    }
+                    else
+                    {
+                        return std::dynamic_pointer_cast<HandlerResult>(ctx->handler_call_target_function(name)->then([](uint32_t result, InterruptContext *ctx) {
+                            ctx->thread[RegisterAccessProxy::Register::PC]->w(ctx->thread[RegisterAccessProxy::Register::LR]->r());
+                            return std::make_shared<HandlerResult>(0);
+                        }));
+                    }
+                });
         }
     }
 
