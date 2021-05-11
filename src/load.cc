@@ -512,7 +512,13 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
             /* make sure _exit is not called, otherwise newlib shuts down */
             LOG(WARN, "ELF \"{}\" is exporting \"_start\", is it compiled as an executable instead of a shared library?", filename);
             LOG(WARN, "If it is indeed a shared library, please use \"static int __attribute__((constructor))\" instead. ");
-            if (call_init_routines({entry.second.second}, ctx, coordinator) != 1)
+
+            init_routines.clear();
+            init_routines.insert(init_routines.end(), ctx.thread_init_routines.begin(), ctx.thread_init_routines.end());
+            init_routines.push_back(entry.second.second);
+            init_routines.insert(init_routines.end(), ctx.thread_fini_routines.begin(), ctx.thread_fini_routines.end());
+
+            if (call_init_routines(init_routines, ctx, coordinator) != init_routines.size())
             {
                 LOG(ERROR, "module load failed because _start failed");
                 return 4;
