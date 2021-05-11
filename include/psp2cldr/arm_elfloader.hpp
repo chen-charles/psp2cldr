@@ -664,6 +664,9 @@ protected:
         case R_ARM_V4BX:
             break;
 
+        case R_ARM_REL32:
+            target.w<uint32_t>(P, ((S + A) | T) | (-P));
+            break;
         case R_ARM_ABS32:
             target.w<uint32_t>(P, (S + A) | T);
             break;
