@@ -441,6 +441,7 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
         }
     }
 
+    uint32_t ptr__start = 0;
     LOG(DEBUG, "checking exports for provider overrides");
     auto exps = elf.get_exports();
     for (auto &exp : exps)
@@ -463,12 +464,26 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
                 });
             }
         }
+
+        if (exp_name == "_start")
+        {
+            /* DEPRECATION */
+            /* make sure _exit is not called, otherwise newlib shuts down */
+            LOG(WARN, "ELF \"{}\" is exporting \"_start\", is it compiled as an executable instead of a shared library?", filename);
+            LOG(WARN, "If it is indeed a shared library, please use \"static int __attribute__((constructor))\" instead. ");
+            ptr__start = ptr_f;
+        }
     }
 
     init_routines.insert(init_routines.end(), ctx.thread_init_routines.begin(), ctx.thread_init_routines.end());
 
     auto elf_init_routines = elf.get_init_routines(proxy, load_base);
     std::move(elf_init_routines.begin(), elf_init_routines.end(), std::back_inserter(init_routines));
+
+    if (ptr__start != 0)
+    {
+        init_routines.push_back(ptr__start);
+    }
 
     init_routines.insert(init_routines.end(), ctx.thread_fini_routines.begin(), ctx.thread_fini_routines.end());
 
@@ -494,6 +509,18 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
                 LOG(ERROR, "module load failed because a protected symbol is being preempted");
                 return 5;
             }
+
+            bool prev_preemptable = ELF32_ST_BIND(prev_sym.st_info) == STB_WEAK;
+            bool this_preempting = ELF32_ST_BIND(sym.st_info) == STB_GLOBAL;
+
+            if (this_preempting && !prev_preemptable)
+                LOG(WARN, "global symbol \"{}\" is being preempted", exp_name);
+
+            if (prev_preemptable && prev_preemptable)
+                LOG(ERROR, "weak symbol \"{}\" is being preempted, logic is not impl.-ed", exp_name);
+
+            if (!this_preempting)
+                continue;
         }
 
         if (ELF32_ST_BIND(sym.st_info) != STB_LOCAL)
@@ -511,23 +538,7 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
             ctx.thread_init_routines.push_back(entry.second.second);
         else if (entry.first.rfind(MAGIC_thread_fini, 0) == 0)
             ctx.thread_fini_routines.push_back(entry.second.second);
-        else if (entry.first == "_start")
-        {
-            /* make sure _exit is not called, otherwise newlib shuts down */
-            LOG(WARN, "ELF \"{}\" is exporting \"_start\", is it compiled as an executable instead of a shared library?", filename);
-            LOG(WARN, "If it is indeed a shared library, please use \"static int __attribute__((constructor))\" instead. ");
 
-            init_routines.clear();
-            init_routines.insert(init_routines.end(), ctx.thread_init_routines.begin(), ctx.thread_init_routines.end());
-            init_routines.push_back(entry.second.second);
-            init_routines.insert(init_routines.end(), ctx.thread_fini_routines.begin(), ctx.thread_fini_routines.end());
-
-            if (call_init_routines(init_routines, ctx, coordinator) != init_routines.size())
-            {
-                LOG(ERROR, "module load failed because _start failed");
-                return 4;
-            }
-        }
         ctx.libs_export_locations[entry.first] = entry.second;
     }
 
