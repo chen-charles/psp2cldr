@@ -7,12 +7,16 @@
 
 uint64_t NativeMemoryAccessProxy::copy_in(uint64_t dest, const void *src, size_t num) const
 {
-    return (uint64_t)memmove((void *)dest, src, num);
+    void *real_dest = (void *)m_translator.translate(dest);
+    memmove(real_dest, src, num);
+    return dest;
 }
 
 void *NativeMemoryAccessProxy::copy_out(void *dest, uint64_t src, size_t num) const
 {
-    return memmove(dest, (void *)src, num);
+    void *real_src = (void *)m_translator.translate(src);
+    memmove(dest, real_src, num);
+    return dest;
 }
 
 uint32_t RegisterAccessProxy_Native::w(uint32_t value)
@@ -147,7 +151,7 @@ _execute_signal_callback:
         LOG(TRACE, "execute: handling interrupt si_signo={:#x}", thread->m_target_siginfo.si_signo);
         if (thread->m_target_siginfo.si_signo == SIGILL)
         {
-            thread->m_intr_callback(thread->m_coord, *thread, SIGILL);
+            thread->m_intr_callback(thread->m_coord, *thread, thread->m_target_siginfo.si_signo);
 
             if (thread->m_stop_called)
             {

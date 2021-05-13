@@ -81,7 +81,7 @@ static int call_init_routines(std::vector<uintptr_t> init_routines, LoadContext 
     auto thread = coordinator.thread_create();
     for (auto &la : init_routines)
     {
-        LOG(DEBUG, "calling init_routine at {:#010x}, until {:#010x}", la, lr);
+        LOG(DEBUG, "calling init_routine at {:#010x}, until {:#010x}, stack_base {:#010x}", la, lr, sp_base);
 
         (*thread)[RegisterAccessProxy::Register::SP]->w(sp);
         (*thread)[RegisterAccessProxy::Register::LR]->w(lr);
@@ -190,7 +190,7 @@ int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinato
         },
         proxy);
     auto &load_base = load_info.first;
-    LOG(INFO, "load base={:#010x}", load_base);
+    LOG(INFO, "load base={:#010x}, load top={:#010x}", load_base, load_base + load_info.second);
 
     LOG(DEBUG, "resolving imports");
     std::vector<uintptr_t> init_routines;
@@ -391,7 +391,7 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
         },
         proxy);
     auto &load_base = load_info.first;
-    LOG(INFO, "load base={:#010x}", load_base);
+    LOG(INFO, "load base={:#010x}, load top={:#010x}", load_base, load_base + load_info.second);
 
     /* constructors might throw exceptions */
     ctx.libs_loaded[filename] = load_info;
@@ -550,9 +550,13 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
         }
 
         // notify everyone else (either linked with prev. def., or weak imports)
-        for (auto &prev_linked : ctx.libs_preemptable_symbols[exp_name])
+        if (ctx.libs_preemptable_symbols.count(exp_name))
         {
-            proxy.w<uint32_t>(ptr_f, prev_linked);
+            for (auto &prev_linked : ctx.libs_preemptable_symbols[exp_name])
+            {
+                proxy.w<uint32_t>(prev_linked, ptr_f);
+            }
+            LOG(WARN, "symbol \"{}\" is resolved", exp_name);
         }
 
         static const char *MAGIC_thread_init = "__psp2cldr_init_";
