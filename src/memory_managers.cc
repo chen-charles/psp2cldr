@@ -7,9 +7,8 @@ MemoryScheduler::MemoryScheduler(size_t alignment, const range &memory, const st
 {
     for (auto &o : occupied_ranges)
         m_occupied.push_back(std::make_pair(o, OccupationType::BLOCKED));
-    std::sort(m_occupied.begin(), m_occupied.end(), [](auto &left, auto &right) {
-        return left.first.first < right.first.first;
-    });
+    std::sort(m_occupied.begin(), m_occupied.end(), [](auto &left, auto &right)
+              { return left.first.first < right.first.first; });
 }
 
 uintptr_t MemoryScheduler::mmap(uintptr_t preferred, size_t length)
@@ -49,9 +48,8 @@ int MemoryScheduler::munmap(uintptr_t addr, size_t length)
 
 uintptr_t MemoryTranslator::translate(const uintptr_t addr) const
 {
-    auto it = std::upper_bound(m_memory_map.begin(), m_memory_map.end(), addr, [](auto &left, auto &right) {
-        return right.first.second > left;
-    }); // first range [a, b) that has b > addr
+    auto it = std::upper_bound(m_memory_map.begin(), m_memory_map.end(), addr, [](auto &left, auto &right)
+                               { return right.first.second > left; }); // first range [a, b) that has b > addr
 
     if (it != m_memory_map.end() && it->first.first <= addr)
         return (addr - it->first.first) + it->second;

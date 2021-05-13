@@ -28,7 +28,8 @@ static int call_init_routines(std::vector<uintptr_t> init_routines, LoadContext 
 
     LOG(DEBUG, "preparing execution environment for init");
     coordinator.register_interrupt_callback(
-        [&ctx](ExecutionCoordinator &coord, ExecutionThread &thread, uint32_t intno) {
+        [&ctx](ExecutionCoordinator &coord, ExecutionThread &thread, uint32_t intno)
+        {
             InterruptContext intr_ctx(coord, thread, ctx);
             auto pc = thread[RegisterAccessProxy::Register::PC]->r();
             if (intno == POSIX_SIGILL)
@@ -183,7 +184,8 @@ int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinato
     LOG(DEBUG, "loading and applying relocations");
     auto &proxy = coordinator.proxy();
     auto load_base = velf.load_and_relocate(
-        [&coordinator](uint32_t addr, size_t len) {
+        [&coordinator](uint32_t addr, size_t len)
+        {
             return coordinator.mmap(addr, len);
         },
         proxy);
@@ -209,7 +211,8 @@ int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinato
                 if (type_of_import == ProviderPokeResult::VARIABLE)
                 {
                     install_nid_stub(ctx, proxy, libraryNID, functionNID, ptr_f, true,
-                                     [](NID_t libraryNID, NID_t functionNID, InterruptContext *ctx) {
+                                     [](NID_t libraryNID, NID_t functionNID, InterruptContext *ctx)
+                                     {
                                          return ctx->load.provider()->get(libraryNID, functionNID)(ctx);
                                      });
                     init_routines.push_back(ptr_f);
@@ -217,7 +220,8 @@ int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinato
                 else
                 {
                     install_nid_stub(ctx, proxy, libraryNID, functionNID, ptr_f, false,
-                                     [](NID_t libraryNID, NID_t functionNID, InterruptContext *ctx) {
+                                     [](NID_t libraryNID, NID_t functionNID, InterruptContext *ctx)
+                                     {
                                          return ctx->load.provider()->get(libraryNID, functionNID)(ctx);
                                      });
                 }
@@ -251,7 +255,8 @@ int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinato
             else
             {
                 install_nid_stub(ctx, proxy, libraryNID, functionNID, ptr_f, false,
-                                 [](NID_t libraryNID, NID_t functionNID, InterruptContext *ctx) {
+                                 [](NID_t libraryNID, NID_t functionNID, InterruptContext *ctx)
+                                 {
                                      LOG(CRITICAL, "import stub for {:#010x}:{:#010x} is hit, unimplemented", libraryNID, functionNID);
                                      return std::make_shared<HandlerResult>(1);
                                  });
@@ -379,7 +384,8 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
     LOG(DEBUG, "loading and applying relocations");
     auto &proxy = coordinator.proxy();
     auto load_base = elf.load_and_relocate(
-        [&coordinator](uint32_t addr, size_t len) {
+        [&coordinator](uint32_t addr, size_t len)
+        {
             return coordinator.mmap(addr, len);
         },
         proxy);
@@ -400,23 +406,21 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
 
             if (type_of_import == ProviderPokeResult::VARIABLE)
             {
-                install_sym_stub(ctx, coordinator, sym_name, imp.first, ptr_f, true, [](std::string name, Elf32_Sym sym, InterruptContext *ctx) {
-                    return ctx->load.provider()->get(name.c_str())(ctx);
-                });
+                install_sym_stub(ctx, coordinator, sym_name, imp.first, ptr_f, true, [](std::string name, Elf32_Sym sym, InterruptContext *ctx)
+                                 { return ctx->load.provider()->get(name.c_str())(ctx); });
                 init_routines.push_back(ptr_f);
             }
             else
             {
-                install_sym_stub(ctx, coordinator, sym_name, imp.first, ptr_f, false, [](std::string name, Elf32_Sym sym, InterruptContext *ctx) {
-                    return ctx->load.provider()->get(name.c_str())(ctx);
-                });
+                install_sym_stub(ctx, coordinator, sym_name, imp.first, ptr_f, false, [](std::string name, Elf32_Sym sym, InterruptContext *ctx)
+                                 { return ctx->load.provider()->get(name.c_str())(ctx); });
             }
         }
         else if (ctx.libs_export_locations.count(sym_name) != 0)
         {
             /* got stores a ptr instead of a stub */
             auto exist_entry = ctx.libs_export_locations[sym_name];
-            auto& exist_sym = exist_entry.first;
+            auto &exist_sym = exist_entry.first;
 
             proxy.w<uint32_t>(ptr_f, exist_entry.second);
             if (ELF32_ST_VISIBILITY(exist_sym.st_other) != STV_PROTECTED)
@@ -434,20 +438,22 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
             }
             else
                 // TODO: remove, since the importer does not know if the stub is installed on a ptr to a variable
-                install_sym_stub(ctx, coordinator, sym_name, imp.first, ptr_f, false, [](std::string name, Elf32_Sym sym, InterruptContext *ctx) {
-                    if (ctx->load.libs_export_locations.count(name) == 0)
-                    {
-                        LOG(CRITICAL, "import stub for {} is hit, unimplemented", name);
-                        return std::make_shared<HandlerResult>(1);
-                    }
-                    else
-                    {
-                        return std::dynamic_pointer_cast<HandlerResult>(ctx->handler_call_target_function(name)->then([](uint32_t result, InterruptContext *ctx) {
-                            ctx->thread[RegisterAccessProxy::Register::PC]->w(ctx->thread[RegisterAccessProxy::Register::LR]->r());
-                            return std::make_shared<HandlerResult>(0);
-                        }));
-                    }
-                });
+                install_sym_stub(ctx, coordinator, sym_name, imp.first, ptr_f, false, [](std::string name, Elf32_Sym sym, InterruptContext *ctx)
+                                 {
+                                     if (ctx->load.libs_export_locations.count(name) == 0)
+                                     {
+                                         LOG(CRITICAL, "import stub for {} is hit, unimplemented", name);
+                                         return std::make_shared<HandlerResult>(1);
+                                     }
+                                     else
+                                     {
+                                         return std::dynamic_pointer_cast<HandlerResult>(ctx->handler_call_target_function(name)->then([](uint32_t result, InterruptContext *ctx)
+                                                                                                                                       {
+                                                                                                                                           ctx->thread[RegisterAccessProxy::Register::PC]->w(ctx->thread[RegisterAccessProxy::Register::LR]->r());
+                                                                                                                                           return std::make_shared<HandlerResult>(0);
+                                                                                                                                       }));
+                                     }
+                                 });
         }
     }
 
@@ -469,9 +475,8 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
             }
             else
             {
-                install_sym_stub(ctx, coordinator, exp_name, exp.first, ptr_f, true, [](std::string name, Elf32_Sym sym, InterruptContext *ctx) {
-                    return ctx->load.provider()->get(name.c_str())(ctx);
-                });
+                install_sym_stub(ctx, coordinator, exp_name, exp.first, ptr_f, true, [](std::string name, Elf32_Sym sym, InterruptContext *ctx)
+                                 { return ctx->load.provider()->get(name.c_str())(ctx); });
             }
         }
 
@@ -532,7 +537,7 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
             else
             {
                 // notify everyone else who linked with the previous definition
-                for (auto& prev_linked: ctx.libs_preemptable_symbols[exp_name])
+                for (auto &prev_linked : ctx.libs_preemptable_symbols[exp_name])
                 {
                     proxy.w<uint32_t>(ptr_f, prev_linked);
                 }

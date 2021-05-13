@@ -128,7 +128,8 @@ ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Unicorn::start(uint32_t
     m_state = THREAD_EXECUTION_STATE::RUNNING;
 
     m_thread = std::thread(
-        [=]() {
+        [=]()
+        {
             auto err = uc_emu_start(m_engine, from, until, 0, 0);
             {
                 if (m_stop_called)

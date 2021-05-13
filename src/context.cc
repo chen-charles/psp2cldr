@@ -38,7 +38,8 @@ static std::shared_ptr<HandlerContinuation> _handler_call_target_function_impl(u
         stub.name = "__psp2cldr__handler_continuation_to_" + u32_str_repr(target_func_ptr);
         uint32_t original_lr = ctx->thread[RegisterAccessProxy::Register::LR]->r();
         uint32_t original_sp = ctx->thread[RegisterAccessProxy::Register::SP]->r();
-        stub.func = [original_lr, original_sp, out](std::string name, Elf32_Sym sym, InterruptContext *p_ctx) {
+        stub.func = [original_lr, original_sp, out](std::string name, Elf32_Sym sym, InterruptContext *p_ctx)
+        {
             auto r0 = p_ctx->thread[RegisterAccessProxy::Register::R0]->r();
             p_ctx->thread[RegisterAccessProxy::Register::LR]->w(original_lr);
 

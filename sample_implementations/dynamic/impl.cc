@@ -131,14 +131,15 @@ DEFINE_VITA_IMP_SYM_EXPORT(basic_test_variable)
 
     if (_p_data == 0)
     {
-        return ctx->handler_call_target_function("malloc", 4)->then([&, p_var](uint32_t result, InterruptContext *ctx) {
-            ctx->coord.proxy().w<uint32_t>(result, 42);
-            ctx->coord.proxy().w<uint32_t>(p_var, result);
-            std::lock_guard guard(_mutex);
-            _p_data = result;
-            TARGET_RETURN(0);
-            HANDLER_RETURN(0);
-        });
+        return ctx->handler_call_target_function("malloc", 4)->then([&, p_var](uint32_t result, InterruptContext *ctx)
+                                                                    {
+                                                                        ctx->coord.proxy().w<uint32_t>(result, 42);
+                                                                        ctx->coord.proxy().w<uint32_t>(p_var, result);
+                                                                        std::lock_guard guard(_mutex);
+                                                                        _p_data = result;
+                                                                        TARGET_RETURN(0);
+                                                                        HANDLER_RETURN(0);
+                                                                    });
     }
     else
     {
