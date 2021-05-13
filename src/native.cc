@@ -318,7 +318,8 @@ void NativeEngineARM::panic_dump_impl(std::shared_ptr<spdlog::logger> logger, in
     logger->info("Execution States");
     for (auto &p_thread : m_threads)
     {
-        logger->info("Thread:");
+        bool isRunning = p_thread->state() == ExecutionThread::THREAD_EXECUTION_STATE::RUNNING;
+        logger->info("Thread:{}", isRunning ? " RUNNING" : "");
 #define reg_val(reg) (*p_thread)[RegisterAccessProxy::Register::reg]->r()
         logger->info("\tR0={:#010x}\t R1={:#010x}\t R2={:#010x}\t R3={:#010x}",
                      reg_val(R0),
