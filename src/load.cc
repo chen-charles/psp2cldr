@@ -433,6 +433,7 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
         {
             if (ELF32_ST_BIND(sym.st_info) == STB_WEAK)
             {
+                ctx.libs_preemptable_symbols[sym_name].push_back(ptr_f);
                 if (sym.st_shndx == SHN_UNDEF)
                     LOG(WARN, "weak import \"{}\" might need a definition", sym_name); // it is perfectly fine to not exist, however
             }
@@ -447,11 +448,13 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
                                      }
                                      else
                                      {
-                                         return std::dynamic_pointer_cast<HandlerResult>(ctx->handler_call_target_function(name)->then([](uint32_t result, InterruptContext *ctx)
-                                                                                                                                       {
-                                                                                                                                           ctx->thread[RegisterAccessProxy::Register::PC]->w(ctx->thread[RegisterAccessProxy::Register::LR]->r());
-                                                                                                                                           return std::make_shared<HandlerResult>(0);
-                                                                                                                                       }));
+                                         return std::dynamic_pointer_cast<HandlerResult>(
+                                             ctx->handler_call_target_function(name)->then(
+                                                 [](uint32_t result, InterruptContext *ctx)
+                                                 {
+                                                     ctx->thread[RegisterAccessProxy::Register::PC]->w(ctx->thread[RegisterAccessProxy::Register::LR]->r());
+                                                     return std::make_shared<HandlerResult>(0);
+                                                 }));
                                      }
                                  });
         }
@@ -534,14 +537,12 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
                 // weak symbols does not preempt a prev. defined weak symbol
                 continue;
             }
-            else
-            {
-                // notify everyone else who linked with the previous definition
-                for (auto &prev_linked : ctx.libs_preemptable_symbols[exp_name])
-                {
-                    proxy.w<uint32_t>(ptr_f, prev_linked);
-                }
-            }
+        }
+
+        // notify everyone else (either linked with prev. def., or weak imports)
+        for (auto &prev_linked : ctx.libs_preemptable_symbols[exp_name])
+        {
+            proxy.w<uint32_t>(ptr_f, prev_linked);
         }
 
         static const char *MAGIC_thread_init = "__psp2cldr_init_";
