@@ -415,13 +415,23 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
         else if (ctx.libs_export_locations.count(sym_name) != 0)
         {
             /* got stores a ptr instead of a stub */
-            auto exist_sym = ctx.libs_export_locations[sym_name];
-            proxy.w<uint32_t>(ptr_f, exist_sym.second);
+            auto exist_entry = ctx.libs_export_locations[sym_name];
+            auto& exist_sym = exist_entry.first;
+
+            proxy.w<uint32_t>(ptr_f, exist_entry.second);
+            if (ELF32_ST_VISIBILITY(exist_sym.st_other) != STV_PROTECTED)
+            {
+                // preemptable
+                ctx.libs_preemptable_symbols[sym_name].push_back(ptr_f);
+            }
         }
         else
         {
             if (ELF32_ST_BIND(sym.st_info) == STB_WEAK)
-                ;
+            {
+                if (sym.st_shndx == SHN_UNDEF)
+                    LOG(WARN, "weak import \"{}\" might need a definition", sym_name); // it is perfectly fine to not exist, however
+            }
             else
                 // TODO: remove, since the importer does not know if the stub is installed on a ptr to a variable
                 install_sym_stub(ctx, coordinator, sym_name, imp.first, ptr_f, false, [](std::string name, Elf32_Sym sym, InterruptContext *ctx) {
@@ -498,8 +508,12 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
     for (auto &exp : exps)
     {
         auto sym = exp.first;
-        auto exp_name = elf.getstr(sym.st_name);
+        std::string exp_name = elf.getstr(sym.st_name);
         auto ptr_f = elf.va2la(exp.second, load_base);
+
+        if (ELF32_ST_BIND(sym.st_info) == STB_LOCAL)
+            continue;
+
         if (ctx.libs_export_locations.count(exp_name) != 0)
         {
             auto prev_entry = ctx.libs_export_locations[exp_name];
@@ -510,37 +524,32 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
                 return 5;
             }
 
-            bool prev_preemptable = ELF32_ST_BIND(prev_sym.st_info) == STB_WEAK;
-            bool this_preempting = ELF32_ST_BIND(sym.st_info) == STB_GLOBAL;
-
-            if (this_preempting && !prev_preemptable)
-                LOG(WARN, "global symbol \"{}\" is being preempted", exp_name);
-
-            if (prev_preemptable && prev_preemptable)
-                LOG(ERROR, "weak symbol \"{}\" is being preempted, logic is not impl.-ed", exp_name);
-
-            if (!this_preempting)
+            if (ELF32_ST_BIND(sym.st_info) != STB_GLOBAL)
+            {
+                // weak symbols does not preempt a prev. defined weak symbol
                 continue;
+            }
+            else
+            {
+                // notify everyone else who linked with the previous definition
+                for (auto& prev_linked: ctx.libs_preemptable_symbols[exp_name])
+                {
+                    proxy.w<uint32_t>(ptr_f, prev_linked);
+                }
+            }
         }
 
-        if (ELF32_ST_BIND(sym.st_info) != STB_LOCAL)
-        {
-            to_export.push_back(std::make_pair(exp_name, std::make_pair(sym, ptr_f)));
-        }
+        static const char *MAGIC_thread_init = "__psp2cldr_init_";
+        static const char *MAGIC_thread_fini = "__psp2cldr_fini_";
+        if (exp_name.rfind(MAGIC_thread_init, 0) == 0)
+            ctx.thread_init_routines.push_back(ptr_f);
+        else if (exp_name.rfind(MAGIC_thread_fini, 0) == 0)
+            ctx.thread_fini_routines.push_back(ptr_f);
+
+        ctx.libs_export_locations[exp_name] = std::make_pair(sym, ptr_f);
     }
 
     ctx.libs_loaded.insert(filename);
-    for (auto &entry : to_export)
-    {
-        static const char *MAGIC_thread_init = "__psp2cldr_init_";
-        static const char *MAGIC_thread_fini = "__psp2cldr_fini_";
-        if (entry.first.rfind(MAGIC_thread_init, 0) == 0)
-            ctx.thread_init_routines.push_back(entry.second.second);
-        else if (entry.first.rfind(MAGIC_thread_fini, 0) == 0)
-            ctx.thread_fini_routines.push_back(entry.second.second);
-
-        ctx.libs_export_locations[entry.first] = entry.second;
-    }
 
     LOG(INFO, "ELF \"{}\" load end", filename);
     return 0;

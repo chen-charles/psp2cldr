@@ -179,6 +179,7 @@ public:
     /* ELF specific */
     std::unordered_set<std::string> libs_loaded;
     std::unordered_map<std::string, std::pair<Elf32_Sym, uint32_t>> libs_export_locations; // symbol_name, <Sym, ptr_f>
+    std::unordered_map<std::string, std::vector<uint32_t>> libs_preemptable_symbols; // symbol_name, [prev_import_ptr_f, ...]
 
 public:
     std::shared_ptr<Provider> provider() { return m_ext_provider; }
