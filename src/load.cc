@@ -183,12 +183,13 @@ int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinato
 
     LOG(DEBUG, "loading and applying relocations");
     auto &proxy = coordinator.proxy();
-    auto load_base = velf.load_and_relocate(
+    auto load_info = velf.load_and_relocate(
         [&coordinator](uint32_t addr, size_t len)
         {
             return coordinator.mmap(addr, len);
         },
         proxy);
+    auto &load_base = load_info.first;
     LOG(INFO, "load base={:#010x}", load_base);
 
     LOG(DEBUG, "resolving imports");
@@ -383,13 +384,22 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
 
     LOG(DEBUG, "loading and applying relocations");
     auto &proxy = coordinator.proxy();
-    auto load_base = elf.load_and_relocate(
+    auto load_info = elf.load_and_relocate(
         [&coordinator](uint32_t addr, size_t len)
         {
             return coordinator.mmap(addr, len);
         },
         proxy);
+    auto &load_base = load_info.first;
     LOG(INFO, "load base={:#010x}", load_base);
+
+    /* constructors might throw exceptions */
+    ctx.libs_loaded[filename] = load_info;
+    uint32_t exidx_va, exidx_sz;
+    if (elf.find_exidx(&exidx_va, &exidx_sz))
+    {
+        ctx.libs_exidx[filename] = {elf.va2la(exidx_va, load_base), exidx_sz};
+    }
 
     LOG(DEBUG, "resolving imports");
     std::vector<uintptr_t> init_routines;
@@ -554,8 +564,6 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
 
         ctx.libs_export_locations[exp_name] = std::make_pair(sym, ptr_f);
     }
-
-    ctx.libs_loaded.insert(filename);
 
     LOG(INFO, "ELF \"{}\" load end", filename);
     return 0;

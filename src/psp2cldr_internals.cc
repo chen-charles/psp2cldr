@@ -42,3 +42,34 @@ DEFINE_VITA_IMP_SYM_EXPORT(__psp2cldr__internal_tls_ctrl)
         HANDLER_RETURN(2);
     }
 }
+
+#undef __gnu_Unwind_Find_exidx
+DEFINE_VITA_IMP_SYM_EXPORT(__gnu_Unwind_Find_exidx)
+{
+    DECLARE_VITA_IMP_TYPE(FUNCTION);
+    auto return_address = PARAM_0;
+    auto pcount = PARAM_1;
+
+    for (auto &entry : ctx->load.libs_loaded)
+    {
+        auto &lib_name = entry.first;
+        auto &load_info = entry.second;
+        if (return_address >= load_info.first && return_address < load_info.first + load_info.second)
+        {
+            if (ctx->load.libs_exidx.count(lib_name) != 0)
+            {
+                auto &exidx = ctx->load.libs_exidx.at(lib_name);
+
+                ctx->coord.proxy().w<uint32_t>(pcount, exidx.second / 8);
+
+                LOG(TRACE, "exidx requested for {:#010x}, retrieved from {}", return_address, lib_name);
+                TARGET_RETURN(exidx.first);
+                HANDLER_RETURN(0);
+            }
+        }
+    }
+
+    LOG(TRACE, "exidx requested for {:#010x}, lookup failed", return_address);
+    TARGET_RETURN(0);
+    HANDLER_RETURN(0);
+}

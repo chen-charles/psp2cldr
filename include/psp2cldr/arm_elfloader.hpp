@@ -65,8 +65,8 @@ public:
             ifs.close();
     }
 
-    // @returns image load base
-    virtual uint32_t load_and_relocate(std::function<uint32_t(uint32_t, size_t)> mmap_func, const MemoryAccessProxy &target) const = 0;
+    // @returns <image load base, image load size>
+    virtual std::pair<uint32_t, uint32_t> load_and_relocate(std::function<uint32_t(uint32_t, size_t)> mmap_func, const MemoryAccessProxy &target) const = 0;
 
     virtual const char *name() const { return NULL; }
 
@@ -434,7 +434,7 @@ public:
         }
     }
 
-    virtual uint32_t load_and_relocate(std::function<uint32_t(uint32_t, size_t)> mmap_func, const MemoryAccessProxy &target) const
+    virtual std::pair<uint32_t, uint32_t> load_and_relocate(std::function<uint32_t(uint32_t, size_t)> mmap_func, const MemoryAccessProxy &target) const
     {
         assert(ifs);
 
@@ -480,7 +480,7 @@ public:
             apply_relocation(target, ELF32_R_TYPE(rela.r_info), P, symbols[ELF32_R_SYM(rela.r_info)], rela.r_addend, B_S, true, load_base);
         }
 
-        return load_base;
+        return {load_base, memory_req.first};
     }
 
     std::vector<uintptr_t> get_init_routines(const MemoryAccessProxy &target, uintptr_t load_base) const // returning LAs
@@ -594,6 +594,26 @@ public:
             }
         }
         return out;
+    }
+
+    bool find_exidx(uint32_t *va, uint32_t *memsz) const // __gnu_Unwind_Find_exidx, pcount should be derived from sizeof(__EIT_entry)
+    {
+        for (uint32_t i = 0; i < phdrs.size(); i++)
+        {
+            auto &phdr = phdrs[i];
+            switch (phdr.p_type)
+            {
+            case PT_ARM_EXIDX:
+            {
+                *va = phdr.p_vaddr;
+                *memsz = phdr.p_memsz;
+                return true;
+            }
+            default:;
+            }
+        }
+
+        return false;
     }
 
 public:

@@ -120,7 +120,7 @@ public:
         }
     }
 
-    virtual uint32_t load_and_relocate(std::function<uint32_t(uint32_t, size_t)> mmap_func, const MemoryAccessProxy &target) const
+    virtual std::pair<uint32_t, uint32_t> load_and_relocate(std::function<uint32_t(uint32_t, size_t)> mmap_func, const MemoryAccessProxy &target) const
     {
         assert(ifs);
 
@@ -282,7 +282,7 @@ public:
             }
         }
 
-        return load_base;
+        return {load_base, memory_req.first};
     }
 
     // pair<LIBRARY_NID, {<OBJECT_NID, stub_va>}>
