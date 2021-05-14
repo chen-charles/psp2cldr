@@ -433,7 +433,7 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
             auto &exist_sym = exist_entry.first;
 
             proxy.w<uint32_t>(ptr_f, exist_entry.second);
-            if (ELF32_ST_VISIBILITY(exist_sym.st_other) != STV_PROTECTED)
+            if (ELF32_ST_VISIBILITY(exist_sym.st_other) == STV_DEFAULT)
             {
                 // preemptable
                 ctx.libs_preemptable_symbols[sym_name].push_back(ptr_f);
@@ -445,7 +445,7 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
             {
                 ctx.libs_preemptable_symbols[sym_name].push_back(ptr_f);
                 if (sym.st_shndx == SHN_UNDEF)
-                    LOG(WARN, "weak import \"{}\" might need a definition", sym_name); // it is perfectly fine to not exist, however
+                    LOG(TRACE, "weak import \"{}\" might need a definition", sym_name); // it is perfectly fine to not exist, however
             }
             else
                 // TODO: remove, since the importer does not know if the stub is installed on a ptr to a variable
@@ -484,6 +484,7 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
 
             if (type_of_import == ProviderPokeResult::VARIABLE)
             {
+                /* it is possible, the symbol just needs to be weak */
                 throw std::logic_error("cannot override variables, because the symbol only holds a pointer value");
             }
             else
@@ -498,7 +499,7 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
             /* DEPRECATION */
             /* make sure _exit is not called, otherwise newlib shuts down */
             LOG(WARN, "ELF \"{}\" is exporting \"_start\", is it compiled as an executable instead of a shared library?", filename);
-            LOG(WARN, "If it is indeed a shared library, please use \"static int __attribute__((constructor))\" instead. ");
+            LOG(WARN, "If it is indeed a shared library, please use \"static void __attribute__((constructor))\" instead. ");
             ptr__start = ptr_f;
         }
     }
@@ -529,7 +530,7 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
         std::string exp_name = elf.getstr(sym.st_name);
         auto ptr_f = elf.va2la(exp.second, load_base);
 
-        if (ELF32_ST_BIND(sym.st_info) == STB_LOCAL)
+        if (ELF32_ST_BIND(sym.st_info) == STB_LOCAL || ELF32_ST_VISIBILITY(sym.st_other) == STV_HIDDEN)
             continue;
 
         if (ctx.libs_export_locations.count(exp_name) != 0)
@@ -556,9 +557,10 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
             {
                 proxy.w<uint32_t>(prev_linked, ptr_f);
             }
-            LOG(WARN, "symbol \"{}\" is resolved", exp_name);
+            LOG(TRACE, "symbol \"{}\" is replaced", exp_name);
         }
 
+        /* per-thread init. routines */
         static const char *MAGIC_thread_init = "__psp2cldr_init_";
         static const char *MAGIC_thread_fini = "__psp2cldr_fini_";
         if (exp_name.rfind(MAGIC_thread_init, 0) == 0)
