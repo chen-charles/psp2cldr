@@ -181,10 +181,11 @@ public:
     std::unordered_map<NIDHASH_t, std::pair<bool, uint32_t>> nids_export_locations; // (moduleNID, funcNID), <isVariable, actual loaded location>
 
     /* ELF specific */
-    std::unordered_map<std::string, std::pair<uint32_t, uint32_t>> libs_loaded;            // library_name, <load_base, load_sz>
-    std::unordered_map<std::string, std::pair<uint32_t, uint32_t>> libs_exidx;             // unwind support: library_name, <exidx_la, exidx_sz>
-    std::unordered_map<std::string, std::pair<Elf32_Sym, uint32_t>> libs_export_locations; // symbol_name, <Sym, ptr_f>
-    std::unordered_map<std::string, std::vector<uint32_t>> libs_preemptable_symbols;       // symbol_name, [prev_import_ptr_f, ...]
+    std::unordered_map<std::string, std::pair<uint32_t, uint32_t>> libs_loaded;             // library_name, <load_base, load_sz>
+    std::unordered_map<std::string, std::pair<uint32_t, uint32_t>> libs_exidx;              // unwind support: library_name, <exidx_la, exidx_sz>
+    std::unordered_map<std::string, std::pair<Elf32_Sym, uint32_t>> libs_export_locations;  // symbol_name, <Sym, ptr_f>
+    std::unordered_map<std::string, std::vector<uint32_t>> libs_preemptable_symbols;        // symbol_name, [prev_import_ptr_f, ...]
+    virtual std::pair<std::string, uint32_t> try_resolve_location(uint32_t location) const; // <library_name, offset> or library_name == ""
 
 public:
     std::shared_ptr<Provider> provider() { return m_ext_provider; }

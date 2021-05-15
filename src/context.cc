@@ -152,3 +152,17 @@ std::string InterruptContext::read_str(uint32_t p_cstr) const
         ss << ch;
     return ss.str();
 }
+
+std::pair<std::string, uint32_t> LoadContext::try_resolve_location(uint32_t location) const
+{
+    for (auto &entry : libs_loaded)
+    {
+        auto &lib_name = entry.first;
+        auto &load_info = entry.second;
+        if (location >= load_info.first && location < load_info.first + load_info.second)
+        {
+            return {lib_name, location - load_info.first};
+        }
+    }
+    return {};
+}
