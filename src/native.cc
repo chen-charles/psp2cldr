@@ -81,7 +81,9 @@ void _sig_handler(int sig, siginfo_t *info, void *ucontext)
 
     auto ctx = reinterpret_cast<ucontext_t *>(ucontext);
 
-    assert(exec_thread->m_started);
+    if (!exec_thread->m_started)
+        return;
+
     exec_thread->m_target_ctx = *ctx;
     exec_thread->m_target_siginfo = *info;
 

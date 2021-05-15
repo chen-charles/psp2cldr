@@ -89,7 +89,7 @@ static int call_from_main_thread(std::vector<uintptr_t> init_routines, LoadConte
 
     auto thread = init_main_thread(ctx, coordinator);
 
-    static const size_t stack_sz = 0x4000;
+    static const size_t stack_sz = 0x200000; // 2 MB stack
     uint32_t sp_base = coordinator.mmap(0, stack_sz);
     uint32_t sp = sp_base + stack_sz;
     uint32_t lr = coordinator.mmap(0, 0x1000);
