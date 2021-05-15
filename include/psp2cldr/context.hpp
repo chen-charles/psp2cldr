@@ -10,7 +10,6 @@
 #include <unordered_set>
 
 #include <psp2cldr/arch.h>
-#include <psp2cldr/panic.hpp>
 
 class InterruptContext;
 class HandlerResult
@@ -147,7 +146,7 @@ public:
 };
 
 class Provider;
-class LoadContext : public PanicDumpable
+class LoadContext
 {
 public:
     LoadContext(std::shared_ptr<Provider> external_provider) : m_ext_provider(external_provider) {}
@@ -192,12 +191,11 @@ public:
 
 protected:
     std::shared_ptr<Provider> m_ext_provider;
-    virtual void panic_dump_impl(std::shared_ptr<spdlog::logger> logger, int code = 0);
 };
 
 class ExecutionCoordinator;
 class ExecutionThread;
-class InterruptContext : public PanicDumpable
+class InterruptContext
 {
 public:
     InterruptContext(ExecutionCoordinator &coord, ExecutionThread &thread, LoadContext &load) : load(load), coord(coord), thread(thread) {}
@@ -223,10 +221,9 @@ public:
 public:
     virtual std::shared_ptr<HandlerResult> install_forward_handler(std::string target);
     virtual std::string read_str(uint32_t p_cstr) const;
+    virtual void panic(int code = 0);
 
 protected:
-    virtual void panic_dump_impl(std::shared_ptr<spdlog::logger> logger, int code = 0);
-
     virtual std::shared_ptr<HandlerContinuation> handler_call_target_function_impl(NIDHASH_t nid_hash);
     virtual std::shared_ptr<HandlerContinuation> handler_call_target_function_impl(std::string name);
 

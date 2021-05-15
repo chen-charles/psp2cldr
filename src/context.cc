@@ -166,3 +166,23 @@ std::pair<std::string, uint32_t> LoadContext::try_resolve_location(uint32_t loca
     }
     return {};
 }
+
+#ifdef _MSC_VER
+#include <intrin.h>
+#else
+#include <signal.h>
+#endif
+
+void InterruptContext::panic(int code)
+{
+    coord.thread_stopall(code);
+    PANIC_LOG("code={:#x}", code);
+    PANIC_LOG("called from thread: {:#x}", thread.tid());
+    coord.panic(code, &load);
+#ifdef _MSC_VER
+    __debugbreak();
+#else
+    raise(SIGTRAP);
+#endif
+    throw std::runtime_error("panic called");
+}

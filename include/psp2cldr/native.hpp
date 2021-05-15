@@ -88,6 +88,8 @@ public:
     virtual void stop(uint32_t retval);
     virtual pthread_t pthread_id() const { return m_thread; }
 
+    virtual void panic(int code = 0, LoadContext *load = nullptr);
+
 public:
     virtual std::shared_ptr<RegisterAccessProxy> operator[](RegisterAccessProxy::Register name)
     {
@@ -149,6 +151,8 @@ public:
     virtual void thread_joinall();
     virtual void thread_stopall(int retval = 0);
 
+    virtual void panic(int code = 0, LoadContext *load = nullptr);
+
     virtual void register_interrupt_callback(std::function<void(ExecutionCoordinator &, ExecutionThread &, uint32_t)> callback)
     {
         m_intr_callback = callback;
@@ -162,8 +166,6 @@ protected:
     std::function<void(ExecutionCoordinator &, ExecutionThread &, uint32_t)> m_intr_callback = {};
     friend void _sig_handler(int sig, siginfo_t *info, void *ucontext);
     friend void *thread_bootstrap(ExecutionThread_Native *thread);
-
-    virtual void panic_dump_impl(std::shared_ptr<spdlog::logger> logger, int code = 0);
 
 protected:
     std::atomic_flag m_threads_lock;

@@ -34,7 +34,30 @@ private:
 #ifndef LOG
 #define LOG(level, ...) SPDLOG_LOGGER_##level(psp2cldr_logger_wrap::get_instance(), __VA_ARGS__)
 #else
-#warning "LOG was defined before including logger.hpp; logger output might not work appropriately"
+#warning "LOG was defined before including logger.hpp"
+#endif
+
+class psp2cldr_panic_logger_wrap
+{
+public:
+    static std::shared_ptr<spdlog::logger> get_instance()
+    {
+        if (!m_logger.get())
+        {
+            m_logger = spdlog::stderr_color_mt("psp2cldr panic");
+            m_logger->set_pattern("PANIC > %v");
+        }
+        return m_logger;
+    }
+
+private:
+    static inline std::shared_ptr<spdlog::logger> m_logger;
+};
+
+#ifndef PANIC_LOG
+#define PANIC_LOG(...) SPDLOG_LOGGER_CRITICAL(psp2cldr_panic_logger_wrap::get_instance(), __VA_ARGS__)
+#else
+#warning "PANIC_LOG was defined before including logger.hpp"
 #endif
 
 #endif

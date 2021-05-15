@@ -11,7 +11,7 @@ project(psp2cldr)
 option (BUILD_SAMPLES "build sample implementations" ON)
 
 add_executable(psp2cldr
-    src/psp2cldr.cc src/load.cc src/provider.cc src/panic.cc src/context.cc src/memory_managers.cc src/psp2cldr_internals.cc
+    src/psp2cldr.cc src/load.cc src/provider.cc src/context.cc src/memory_managers.cc src/psp2cldr_internals.cc
 )
 include_directories(include)
 

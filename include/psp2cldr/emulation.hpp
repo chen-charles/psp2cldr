@@ -107,6 +107,8 @@ public:
     virtual THREAD_EXECUTION_RESULT join(uint32_t *retval);
     virtual void stop(uint32_t retval);
 
+    virtual void panic(int code = 0, LoadContext *load = nullptr);
+
 public:
     virtual std::shared_ptr<RegisterAccessProxy> operator[](RegisterAccessProxy::Register name)
     {
@@ -164,6 +166,8 @@ public:
     virtual void thread_joinall();
     virtual void thread_stopall(int retval = 0);
 
+    virtual void panic(int code = 0, LoadContext *load = nullptr);
+
 protected:
     MemoryScheduler m_scheduler{0x1000, std::make_pair(0x400000, 0x20000000)};
     MemoryTranslator m_translator;
@@ -171,7 +175,6 @@ protected:
 
 protected:
     std::function<void(ExecutionCoordinator &, ExecutionThread &, uint32_t)> m_intr_callback = {};
-    virtual void panic_dump_impl(std::shared_ptr<spdlog::logger> logger, int code = 0);
 
 protected:
     std::recursive_mutex m_threads_lock;

@@ -58,18 +58,18 @@ static std::shared_ptr<ExecutionThread> init_main_thread(LoadContext &ctx, Execu
                         else
                         {
                             LOG(CRITICAL, "handler {} returned {:#010x} != 0, die ...", entry.repr(), handler_result->result());
-                            coord.panic(1, &intr_ctx);
+                            intr_ctx.panic(1);
                         }
                     }
                     else
                     {
                         LOG(CRITICAL, "unexpected SIGILL at {:#010x}, instr={:#010x}", pc, coord.proxy().r<uint32_t>(pc));
-                        coord.panic(2, &intr_ctx);
+                        intr_ctx.panic(2);
                     }
                 }
                 else
                 {
-                    coord.panic(3, &intr_ctx);
+                    intr_ctx.panic(3);
                 }
             });
 

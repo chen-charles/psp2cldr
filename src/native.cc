@@ -359,37 +359,60 @@ void NativeEngineARM::thread_stopall(int retval)
     m_threads_lock.clear();
 }
 
-void NativeEngineARM::panic_dump_impl(std::shared_ptr<spdlog::logger> logger, int code)
+#include <psp2cldr/context.hpp>
+
+void ExecutionThread_Native::panic(int code, LoadContext *load)
 {
-    logger->info("Execution States");
+}
+
+void NativeEngineARM::panic(int code, LoadContext *load)
+{
+    PANIC_LOG("Backend: NativeEngineARM");
     while (m_threads_lock.test_and_set())
         ;
     for (auto &p_thread : m_threads)
     {
-        bool isRunning = p_thread->state() == ExecutionThread::THREAD_EXECUTION_STATE::RUNNING;
-        logger->info("Thread:{}", isRunning ? " RUNNING" : "");
-#define reg_val(reg) (*p_thread)[RegisterAccessProxy::Register::reg]->r()
-        logger->info("\tR0={:#010x}\t R1={:#010x}\t R2={:#010x}\t R3={:#010x}",
-                     reg_val(R0),
-                     reg_val(R1),
-                     reg_val(R2),
-                     reg_val(R3));
-        logger->info("\tR4={:#010x}\t R5={:#010x}\t R6={:#010x}\t R7={:#010x}",
-                     reg_val(R4),
-                     reg_val(R5),
-                     reg_val(R6),
-                     reg_val(R7));
-        logger->info("\tR8={:#010x}\t R9={:#010x}\tR10={:#010x}\t FP={:#010x}",
-                     reg_val(R8),
-                     reg_val(R9),
-                     reg_val(R10),
-                     reg_val(FP));
-        logger->info("\tIP={:#010x}\t SP={:#010x}\t LR={:#010x}\t PC={:#010x}",
-                     reg_val(IP),
-                     reg_val(SP),
-                     reg_val(LR),
-                     reg_val(PC));
-        logger->info("\tCPSR={:#032b}", reg_val(CPSR));
+        PANIC_LOG("Thread: tid={:#x}", p_thread->tid());
+#define reg_info_dump(reg)                                                                              \
+    {                                                                                                   \
+        auto _reg_val = (*p_thread)[RegisterAccessProxy::Register::reg]->r();                           \
+        if (load)                                                                                       \
+        {                                                                                               \
+            auto _pair = load->try_resolve_location(_reg_val);                                          \
+            if (!_pair.first.empty())                                                                   \
+                PANIC_LOG("\t{}={:#010x}\t<{} + {:#010x}>", #reg, _reg_val, _pair.first, _pair.second); \
+            else                                                                                        \
+                PANIC_LOG("\t{}={:#010x}\t<\?\?>", #reg, _reg_val);                                     \
+        }                                                                                               \
+        else                                                                                            \
+            PANIC_LOG("\t{}={:#010x}", #reg, _reg_val);                                                 \
+    }
+
+        reg_info_dump(R0);
+        reg_info_dump(R1);
+        reg_info_dump(R2);
+        reg_info_dump(R3);
+        reg_info_dump(R4);
+        reg_info_dump(R5);
+        reg_info_dump(R6);
+        reg_info_dump(R7);
+        reg_info_dump(R8);
+        reg_info_dump(R9);
+        reg_info_dump(R10);
+        reg_info_dump(FP);
+        reg_info_dump(IP);
+        reg_info_dump(SP);
+        reg_info_dump(LR);
+        reg_info_dump(PC);
+        PANIC_LOG("\tCPSR={:#032b}", (*p_thread)[RegisterAccessProxy::Register::CPSR]->r());
+
+        try
+        {
+            PANIC_LOG("\tinstr@PC={:#010x}", proxy().r<uint32_t>((*p_thread)[RegisterAccessProxy::Register::PC]->r()));
+        }
+        catch (...)
+        {
+        }
     }
     m_threads_lock.clear();
 }

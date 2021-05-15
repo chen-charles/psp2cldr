@@ -8,12 +8,12 @@
 #include <memory>
 
 #include <psp2cldr/access_proxy.hpp>
-#include <psp2cldr/panic.hpp>
 
 class InterruptContext;
+class LoadContext;
 
 class ExecutionCoordinator;
-class ExecutionThread : public PanicDumpable
+class ExecutionThread
 {
 private:
     static inline std::atomic<uint32_t> _id_ctr = 1;
@@ -57,6 +57,8 @@ public:
     virtual THREAD_EXECUTION_RESULT join(uint32_t *retval = nullptr) = 0; // retval is set iff result is STOP_UNTIL_POINT_HIT
     virtual void stop(uint32_t retval = 0) = 0;
 
+    virtual void panic(int code = 0, LoadContext *load = nullptr) = 0;
+
     virtual void register_interrupt_callback(std::function<void(ExecutionCoordinator &, ExecutionThread &, uint32_t)> callback) = 0;
 
 public:
@@ -65,7 +67,7 @@ public:
     virtual std::shared_ptr<const RegisterAccessProxy> operator[](RegisterAccessProxy::Register name) const = 0;
 };
 
-class ExecutionCoordinator : public PanicDumpable
+class ExecutionCoordinator
 {
 public:
     ExecutionCoordinator() {}
@@ -85,13 +87,7 @@ public:
     virtual void thread_joinall() = 0;
     virtual void thread_stopall(int retval = 0) = 0;
 
-    virtual void panic(int code = 0, PanicDumpable *dumpable = nullptr)
-    {
-        if (dumpable == nullptr)
-            dumpable = this;
-        psp2cldr_panic(code, dumpable);
-        thread_stopall(code);
-    }
+    virtual void panic(int code = 0, LoadContext *load = nullptr) = 0;
 
     // default interrupt callback for all newly created threads
     virtual void register_interrupt_callback(std::function<void(ExecutionCoordinator &, ExecutionThread &, uint32_t)> callback) = 0;
