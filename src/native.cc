@@ -30,8 +30,6 @@ uint32_t RegisterAccessProxy_Native::r() const
     return *((unsigned long int *)(&(m_engine->m_target_ctx.uc_mcontext.arm_r0)) + reg_mapping.at(name()));
 }
 
-#define DO_RETURN_STACK_SZ 0x1000
-static char do_return_stack[DO_RETURN_STACK_SZ] __attribute__((aligned(16)));
 [[noreturn]] static void do_return(ucontext_t *ucp) /* HAX, but at least it's better than siglongjmp */
 {
     if (setcontext(ucp) == -1)
@@ -99,7 +97,7 @@ void _sig_handler(int sig, siginfo_t *info, void *ucontext)
     else
         ctx->uc_mcontext.arm_cpsr &= ~(1 << 5);
     // we need a minimal C running environment, which involves a stack
-    ctx->uc_mcontext.arm_sp = (uint32_t)(&do_return_stack) + DO_RETURN_STACK_SZ;
+    ctx->uc_mcontext.arm_sp = (uint32_t)(&exec_thread->do_return_stack) + DO_RETURN_STACK_SZ;
 
     // execution resumes in execute, or we are dead
 }
@@ -131,7 +129,7 @@ void *thread_bootstrap(ExecutionThread_Native *thread)
     {
         if (!thread->m_started)
         {
-            LOG(TRACE, "execute: ready to start");
+            LOG(TRACE, "execute({}): ready to start", thread->tid());
             thread->m_started = true;
 
             setcontext(&thread->m_target_ctx); // no return, or it failed
@@ -156,19 +154,19 @@ _execute_signal_callback:
 
     if (thread->m_handling_interrupt)
     {
-        LOG(TRACE, "execute: handling interrupt si_signo={:#x}", thread->m_target_siginfo.si_signo);
+        LOG(TRACE, "execute({}): handling interrupt si_signo={:#x}", thread->tid(), thread->m_target_siginfo.si_signo);
         if (thread->m_target_siginfo.si_signo == SIGILL)
         {
             thread->m_intr_callback(thread->m_coord, *thread, thread->m_target_siginfo.si_signo);
 
             if (thread->m_stop_called)
             {
-                LOG(TRACE, "execute: stop() called, done");
+                LOG(TRACE, "execute({}): stop() called, done", thread->tid());
                 result = ExecutionThread::THREAD_EXECUTION_RESULT::STOP_CALLED;
             }
             else
             {
-                LOG(TRACE, "execute: interrupt handling complete, resuming execution");
+                LOG(TRACE, "execute({}): interrupt handling complete, resuming execution", thread->tid());
 
                 // continue target execution
                 thread->m_handling_interrupt = false;
@@ -180,14 +178,14 @@ _execute_signal_callback:
         }
         else
         {
-            LOG(TRACE, "execute: unexpected interrupt, stopping");
+            LOG(TRACE, "execute({}): unexpected interrupt, stopping", thread->tid());
             thread->stop(1);
             result = ExecutionThread::THREAD_EXECUTION_RESULT::STOP_ERRORED;
         }
     }
     else
     {
-        LOG(TRACE, "execute: STOP_UNTIL_POINT_HIT, done");
+        LOG(TRACE, "execute({}): STOP_UNTIL_POINT_HIT, done", thread->tid());
 
         thread->m_started = false;
         result = ExecutionThread::THREAD_EXECUTION_RESULT::STOP_UNTIL_POINT_HIT;

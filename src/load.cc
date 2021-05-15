@@ -50,9 +50,9 @@ static std::shared_ptr<ExecutionThread> init_main_thread(LoadContext &ctx, Execu
 
                     if (entry_exists)
                     {
-                        LOG(TRACE, "handler: {}", entry.repr());
+                        LOG(TRACE, "handler({}): {}", thread.tid(), entry.repr());
                         auto handler_result = entry.call(&intr_ctx);
-                        LOG(TRACE, "handler exit: {}", entry.repr());
+                        LOG(TRACE, "handler({}) exit: {}", thread.tid(), entry.repr());
                         if (handler_result->result() == 0)
                             return;
                         else

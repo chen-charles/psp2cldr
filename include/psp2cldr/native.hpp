@@ -125,6 +125,8 @@ protected:
     friend class RegisterAccessProxy_Native;
     friend void _sig_handler(int sig, siginfo_t *info, void *ucontext);
     friend void *thread_bootstrap(ExecutionThread_Native *thread);
+#define DO_RETURN_STACK_SZ 0x1000
+    char do_return_stack[DO_RETURN_STACK_SZ] __attribute__((aligned(16)));
 };
 
 class NativeEngineARM : public ExecutionCoordinator
