@@ -23,7 +23,7 @@ public:
     uint32_t tid() const
     {
         if (m_tid == 0)
-            return m_tid = _id_ctr ++;
+            return m_tid = _id_ctr++;
         return m_tid;
     }
 
@@ -81,7 +81,7 @@ public:
      * on platforms that does not natively support target threading, only a single thread of execution on the target will be active at any given time.
      */
     [[nodiscard]] virtual std::shared_ptr<ExecutionThread> thread_create() = 0;
-    virtual int thread_destory(std::weak_ptr<ExecutionThread> thread) = 0;
+    virtual int thread_destroy(std::weak_ptr<ExecutionThread> thread) = 0;
     virtual void thread_joinall() = 0;
     virtual void thread_stopall(int retval = 0) = 0;
 

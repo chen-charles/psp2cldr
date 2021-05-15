@@ -272,7 +272,7 @@ DEFINE_VITA_IMP_NID_EXPORT(859A24B1, 1BBDE3D9)
             std::lock_guard<std::mutex> guard{threads_lock};
             threads.erase(threadID);
         }
-        ctx->coord.thread_destory(thread);
+        ctx->coord.thread_destroy(thread);
     }
 
     TARGET_RETURN(0);

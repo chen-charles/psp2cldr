@@ -208,7 +208,7 @@ void ExecutionThread_Unicorn::stop(uint32_t retval)
     return casted;
 }
 
-int UnicornEngineARM::thread_destory(std::weak_ptr<ExecutionThread> thread)
+int UnicornEngineARM::thread_destroy(std::weak_ptr<ExecutionThread> thread)
 {
     if (auto p = thread.lock())
     {

@@ -304,7 +304,7 @@ int NativeEngineARM::munmap(uintptr_t addr, size_t length)
     return casted;
 }
 
-int NativeEngineARM::thread_destory(std::weak_ptr<ExecutionThread> thread)
+int NativeEngineARM::thread_destroy(std::weak_ptr<ExecutionThread> thread)
 {
     if (auto p = thread.lock())
     {

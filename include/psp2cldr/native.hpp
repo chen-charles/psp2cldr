@@ -143,7 +143,7 @@ public:
     virtual int munmap(uintptr_t addr, size_t length);
 
     [[nodiscard]] virtual std::shared_ptr<ExecutionThread> thread_create();
-    virtual int thread_destory(std::weak_ptr<ExecutionThread> thread);
+    virtual int thread_destroy(std::weak_ptr<ExecutionThread> thread);
     virtual void thread_joinall();
     virtual void thread_stopall(int retval = 0);
 
