@@ -56,15 +56,23 @@ void _sig_handler(int sig, siginfo_t *info, void *ucontext)
 
     std::shared_ptr<ExecutionThread_Native> exec_thread;
     auto thread_id = pthread_self();
-    for (auto &thread : coord->m_threads)
     {
-        auto casted = std::dynamic_pointer_cast<ExecutionThread_Native>(thread);
-        if (pthread_equal(casted->pthread_id(), thread_id))
+        while (coord->m_threads_lock.test_and_set())
+            ;
+
+        for (auto &thread : coord->m_threads)
         {
-            exec_thread = casted;
-            break;
+            auto casted = std::dynamic_pointer_cast<ExecutionThread_Native>(thread);
+            if (pthread_equal(casted->pthread_id(), thread_id))
+            {
+                exec_thread = casted;
+                break;
+            }
         }
+
+        coord->m_threads_lock.clear();
     }
+
     if (!exec_thread)
     {
         if (coord->m_old_action.sa_flags & SA_SIGINFO)
@@ -285,7 +293,14 @@ int NativeEngineARM::munmap(uintptr_t addr, size_t length)
     auto thread = std::make_shared<ExecutionThread_Native>(*this);
     thread->register_interrupt_callback(m_intr_callback);
     auto casted = std::dynamic_pointer_cast<ExecutionThread>(thread);
+
+    while (m_threads_lock.test_and_set())
+        ;
+
     m_threads.insert(casted);
+
+    m_threads_lock.clear();
+
     return casted;
 }
 
@@ -293,13 +308,19 @@ int NativeEngineARM::thread_destory(std::weak_ptr<ExecutionThread> thread)
 {
     if (auto p = thread.lock())
     {
+        while (m_threads_lock.test_and_set())
+            ;
         if (m_threads.count(p) != 0)
         {
             p->stop();
             p->join();
             m_threads.erase(p);
+
+            m_threads_lock.clear();
             return 0;
         }
+        m_threads_lock.clear();
+
         return 1;
     }
     return 2;
@@ -307,19 +328,42 @@ int NativeEngineARM::thread_destory(std::weak_ptr<ExecutionThread> thread)
 
 void NativeEngineARM::thread_joinall()
 {
-    for (auto &thread : m_threads)
-        thread->join();
+    do
+    {
+        size_t left;
+        std::shared_ptr<ExecutionThread> p;
+
+        {
+            while (m_threads_lock.test_and_set())
+                ;
+
+            left = m_threads.size();
+            if (left)
+                p = *m_threads.begin();
+            m_threads_lock.clear();
+        }
+
+        if (left)
+            p->join();
+        else
+            break;
+    } while (1);
 }
 
 void NativeEngineARM::thread_stopall(int retval)
 {
+    while (m_threads_lock.test_and_set())
+        ;
     for (auto &thread : m_threads)
         thread->stop();
+    m_threads_lock.clear();
 }
 
 void NativeEngineARM::panic_dump_impl(std::shared_ptr<spdlog::logger> logger, int code)
 {
     logger->info("Execution States");
+    while (m_threads_lock.test_and_set())
+        ;
     for (auto &p_thread : m_threads)
     {
         bool isRunning = p_thread->state() == ExecutionThread::THREAD_EXECUTION_STATE::RUNNING;
@@ -347,6 +391,7 @@ void NativeEngineARM::panic_dump_impl(std::shared_ptr<spdlog::logger> logger, in
                      reg_val(PC));
         logger->info("\tCPSR={:#032b}", reg_val(CPSR));
     }
+    m_threads_lock.clear();
 }
 
 NativeEngineARM::NativeEngineARM() : ExecutionCoordinator()

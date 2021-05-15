@@ -166,7 +166,10 @@ public:
 public:
     // target routines to be called per thread
     std::vector<uint32_t> thread_init_routines;
-    std::vector<uint32_t> thread_fini_routines;
+    std::vector<uint32_t> thread_fini_routines; // should be called reversely
+
+    // main thread fini routines, should be called prior to main thread's exit, reversely
+    std::vector<uint32_t> mainthread_fini_routines;
 
 public:
     /* loader context */

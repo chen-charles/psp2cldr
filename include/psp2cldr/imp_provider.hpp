@@ -34,9 +34,14 @@
 #define PARAM_2 ctx->thread[RegisterAccessProxy::Register::R2]->r()
 #define PARAM_3 ctx->thread[RegisterAccessProxy::Register::R3]->r()
 #define PARAM_4x(idx) ctx->coord.proxy().r<uint32_t>(ctx->thread[RegisterAccessProxy::Register::SP]->r() + (idx - 4) * sizeof(uint32_t))
-#define TARGET_RETURN(val)                                  \
-    ctx->thread[RegisterAccessProxy::Register::R0]->w(val); \
-    ctx->thread[RegisterAccessProxy::Register::PC]->w(ctx->thread[RegisterAccessProxy::Register::LR]->r())
+
+static inline void _target_return_impl(InterruptContext *ctx, uint32_t val)
+{
+    ctx->thread[RegisterAccessProxy::Register::R0]->w(val);
+    ctx->thread[RegisterAccessProxy::Register::PC]->w(ctx->thread[RegisterAccessProxy::Register::LR]->r());
+}
+
+#define TARGET_RETURN(val) _target_return_impl(ctx, val)
 #define HANDLER_RETURN(val) return std::make_shared<HandlerResult>(val)
 
 #define _FORWARD_PASTE(a) a

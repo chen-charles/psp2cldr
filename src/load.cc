@@ -21,56 +21,73 @@ static const char INSTR_BKPT3_THM[]{"\x03\xbe"};
 static const uint32_t INSTR_UDF0_ARM = 0xe7f000f0;
 static const uint16_t INSTR_UDF0_THM = 0xde00;
 
-static int call_init_routines(std::vector<uintptr_t> init_routines, LoadContext &ctx, ExecutionCoordinator &coordinator)
+static std::shared_ptr<ExecutionThread> init_main_thread(LoadContext &ctx, ExecutionCoordinator &coordinator)
 {
-    if (init_routines.empty())
-        return 0;
+    static std::shared_ptr<ExecutionThread> thread;
 
-    LOG(DEBUG, "preparing execution environment for init");
-    coordinator.register_interrupt_callback(
-        [&ctx](ExecutionCoordinator &coord, ExecutionThread &thread, uint32_t intno)
-        {
-            InterruptContext intr_ctx(coord, thread, ctx);
-            auto pc = thread[RegisterAccessProxy::Register::PC]->r();
-            if (intno == POSIX_SIGILL)
+    if (!thread)
+    {
+        LOG(DEBUG, "preparing execution environment for init");
+        coordinator.register_interrupt_callback(
+            [&ctx](ExecutionCoordinator &coord, ExecutionThread &thread, uint32_t intno)
             {
-                if (thread[RegisterAccessProxy::Register::CPSR]->r() & (1 << 5))
-                    pc |= 1;
-                bool entry_exists = false;
-                import_stub_entry entry;
+                InterruptContext intr_ctx(coord, thread, ctx);
+                auto pc = thread[RegisterAccessProxy::Register::PC]->r();
+                if (intno == POSIX_SIGILL)
                 {
-                    std::shared_lock guard(ctx.unimplemented_targets_mutex);
-                    if (ctx.unimplemented_targets.count(pc) != 0)
+                    if (thread[RegisterAccessProxy::Register::CPSR]->r() & (1 << 5))
+                        pc |= 1;
+                    bool entry_exists = false;
+                    import_stub_entry entry;
                     {
-                        entry_exists = true;
-                        entry = ctx.unimplemented_targets.at(pc);
+                        std::shared_lock guard(ctx.unimplemented_targets_mutex);
+                        if (ctx.unimplemented_targets.count(pc) != 0)
+                        {
+                            entry_exists = true;
+                            entry = ctx.unimplemented_targets.at(pc);
+                        }
                     }
-                }
 
-                if (entry_exists)
-                {
-                    LOG(TRACE, "handler: {}", entry.repr());
-                    auto handler_result = entry.call(&intr_ctx);
-                    LOG(TRACE, "handler exit: {}", entry.repr());
-                    if (handler_result->result() == 0)
-                        return;
+                    if (entry_exists)
+                    {
+                        LOG(TRACE, "handler: {}", entry.repr());
+                        auto handler_result = entry.call(&intr_ctx);
+                        LOG(TRACE, "handler exit: {}", entry.repr());
+                        if (handler_result->result() == 0)
+                            return;
+                        else
+                        {
+                            LOG(CRITICAL, "handler {} returned {:#010x} != 0, die ...", entry.repr(), handler_result->result());
+                            coord.panic(1, &intr_ctx);
+                        }
+                    }
                     else
                     {
-                        LOG(CRITICAL, "handler {} returned {:#010x} != 0, die ...", entry.repr(), handler_result->result());
-                        coord.panic(1, &intr_ctx);
+                        LOG(CRITICAL, "unexpected SIGILL at {:#010x}, instr={:#010x}", pc, coord.proxy().r<uint32_t>(pc));
+                        coord.panic(2, &intr_ctx);
                     }
                 }
                 else
                 {
-                    LOG(CRITICAL, "unexpected SIGILL at {:#010x}, instr={:#010x}", pc, coord.proxy().r<uint32_t>(pc));
-                    coord.panic(2, &intr_ctx);
+                    coord.panic(3, &intr_ctx);
                 }
-            }
-            else
-            {
-                coord.panic(3, &intr_ctx);
-            }
-        });
+            });
+
+        thread = coordinator.thread_create();
+    }
+
+    return thread;
+}
+
+static int call_from_main_thread(std::vector<uintptr_t> init_routines, LoadContext &ctx, ExecutionCoordinator &coordinator)
+{
+    // there is a single mainthread through the lifetime of an application
+    // upon its exit, all subsequent threads are killed
+
+    if (init_routines.empty())
+        return 0;
+
+    auto thread = init_main_thread(ctx, coordinator);
 
     static const size_t stack_sz = 0x4000;
     uint32_t sp_base = coordinator.mmap(0, stack_sz);
@@ -78,7 +95,6 @@ static int call_init_routines(std::vector<uintptr_t> init_routines, LoadContext 
     uint32_t lr = coordinator.mmap(0, 0x1000);
 
     size_t succ_counter = 0;
-    auto thread = coordinator.thread_create();
     for (auto &la : init_routines)
     {
         LOG(DEBUG, "calling init_routine at {:#010x}, until {:#010x}, stack_base {:#010x}", la, lr, sp_base);
@@ -98,7 +114,6 @@ static int call_init_routines(std::vector<uintptr_t> init_routines, LoadContext 
 
         succ_counter++;
     }
-    coordinator.thread_destory(thread);
 
     coordinator.munmap(sp_base, stack_sz);
     coordinator.munmap(lr, 0x1000);
@@ -291,11 +306,9 @@ int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinato
     if (!module_start)
         throw std::runtime_error("module_start is not exported");
 
-    init_routines.insert(init_routines.end(), ctx.thread_init_routines.begin(), ctx.thread_init_routines.end());
     init_routines.push_back(module_start);
-    init_routines.insert(init_routines.end(), ctx.thread_fini_routines.begin(), ctx.thread_fini_routines.end());
 
-    if (call_init_routines(init_routines, ctx, coordinator) != init_routines.size())
+    if (call_from_main_thread(init_routines, ctx, coordinator) != init_routines.size())
     {
         LOG(ERROR, "module load failed because init_routines failed");
         return 4;
@@ -504,8 +517,6 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
         }
     }
 
-    init_routines.insert(init_routines.end(), ctx.thread_init_routines.begin(), ctx.thread_init_routines.end());
-
     auto elf_init_routines = elf.get_init_routines(proxy, load_base);
     std::move(elf_init_routines.begin(), elf_init_routines.end(), std::back_inserter(init_routines));
 
@@ -514,13 +525,14 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
         init_routines.push_back(ptr__start);
     }
 
-    init_routines.insert(init_routines.end(), ctx.thread_fini_routines.begin(), ctx.thread_fini_routines.end());
-
-    if (call_init_routines(init_routines, ctx, coordinator) != init_routines.size())
+    if (call_from_main_thread(init_routines, ctx, coordinator) != init_routines.size())
     {
         LOG(ERROR, "module load failed because init_routine failed");
         return 4;
     }
+
+    auto elf_term_routines = elf.get_term_routines(proxy, load_base);
+    std::move(elf_term_routines.begin(), elf_term_routines.end(), std::back_inserter(ctx.mainthread_fini_routines));
 
     std::vector<std::pair<std::string, std::pair<Elf32_Sym, uint32_t>>> to_export;
     LOG(DEBUG, "exporting exports");
@@ -564,7 +576,14 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
         static const char *MAGIC_thread_init = "__psp2cldr_init_";
         static const char *MAGIC_thread_fini = "__psp2cldr_fini_";
         if (exp_name.rfind(MAGIC_thread_init, 0) == 0)
+        {
             ctx.thread_init_routines.push_back(ptr_f);
+            if (call_from_main_thread({ptr_f}, ctx, coordinator) != 1)
+            {
+                LOG(ERROR, "module load failed because {} failed", exp_name);
+                return 4;
+            }
+        }
         else if (exp_name.rfind(MAGIC_thread_fini, 0) == 0)
             ctx.thread_fini_routines.push_back(ptr_f);
 

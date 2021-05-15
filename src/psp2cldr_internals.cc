@@ -43,6 +43,39 @@ DEFINE_VITA_IMP_SYM_EXPORT(__psp2cldr__internal_tls_ctrl)
     }
 }
 
+#include <psp2cldr/provider.hpp>
+#undef __psp2cldr__internal_call_nid
+DEFINE_VITA_IMP_SYM_EXPORT(__psp2cldr__internal_call_nid)
+{
+    DECLARE_VITA_IMP_TYPE(FUNCTION);
+    uint32_t libraryNID = PARAM_0;
+    uint32_t functionNID = PARAM_1;
+    auto ptr = ctx->load.provider()->get(libraryNID, functionNID);
+    if (!ptr)
+    {
+        // treat as a strong symbol
+        LOG(CRITICAL, "__psp2cldr__internal_call_nid to {:#010x}:{:#010x} is hit, unimplemented", libraryNID, functionNID);
+        HANDLER_RETURN(1);
+    }
+    return ptr(ctx);
+}
+
+#undef __psp2cldr__internal_call_sym
+DEFINE_VITA_IMP_SYM_EXPORT(__psp2cldr__internal_call_sym)
+{
+    DECLARE_VITA_IMP_TYPE(FUNCTION);
+    uint32_t p_c_str = PARAM_0;
+    auto sym_name = ctx->read_str(p_c_str);
+    auto ptr = ctx->load.provider()->get(sym_name);
+    if (!ptr)
+    {
+        // treat as a strong symbol
+        LOG(CRITICAL, "__psp2cldr__internal_call_sym to \"{}\" is hit, unimplemented", sym_name);
+        HANDLER_RETURN(1);
+    }
+    return ptr(ctx);
+}
+
 #undef __gnu_Unwind_Find_exidx
 DEFINE_VITA_IMP_SYM_EXPORT(__gnu_Unwind_Find_exidx)
 {

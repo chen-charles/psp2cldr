@@ -243,8 +243,9 @@ DEFINE_VITA_IMP_NID_EXPORT(859A24B1, 1BBDE3D9)
         uint32_t lr = (*thread)[RegisterAccessProxy::Register::PC]->r(); // assuming UNTIL_POINT_HIT
 
         size_t succ_counter = 0;
-        for (auto &la : ctx->load.thread_fini_routines)
+        for (auto it = ctx->load.thread_fini_routines.rbegin(); it != ctx->load.thread_fini_routines.rend(); it++)
         {
+            auto &la = *it;
             (*thread)[RegisterAccessProxy::Register::SP]->w(sp);
             (*thread)[RegisterAccessProxy::Register::LR]->w(lr);
 

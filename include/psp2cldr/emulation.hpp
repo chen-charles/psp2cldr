@@ -174,6 +174,7 @@ protected:
     virtual void panic_dump_impl(std::shared_ptr<spdlog::logger> logger, int code = 0);
 
 protected:
+    std::recursive_mutex m_threads_lock;
     std::unordered_set<std::shared_ptr<ExecutionThread>> m_threads;
 };
 

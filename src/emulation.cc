@@ -85,6 +85,7 @@ uintptr_t UnicornEngineARM::mmap(uintptr_t preferred, size_t length)
         auto ptr = m_allocator.alloc(m_scheduler.alignment(), aligned_length);
         m_translator.add(addr, aligned_length, ptr);
 
+        std::lock_guard<std::recursive_mutex> guard(m_threads_lock);
         for (auto &thread : m_threads)
         {
             auto casted = std::dynamic_pointer_cast<ExecutionThread_Unicorn>(thread);
@@ -201,6 +202,8 @@ void ExecutionThread_Unicorn::stop(uint32_t retval)
     }
     thread->register_interrupt_callback(m_intr_callback);
     auto casted = std::dynamic_pointer_cast<ExecutionThread>(thread);
+
+    std::lock_guard<std::recursive_mutex> guard(m_threads_lock);
     m_threads.insert(casted);
     return casted;
 }
@@ -209,6 +212,7 @@ int UnicornEngineARM::thread_destory(std::weak_ptr<ExecutionThread> thread)
 {
     if (auto p = thread.lock())
     {
+        std::lock_guard<std::recursive_mutex> guard(m_threads_lock);
         if (m_threads.count(p) != 0)
         {
             p->stop();
@@ -223,12 +227,28 @@ int UnicornEngineARM::thread_destory(std::weak_ptr<ExecutionThread> thread)
 
 void UnicornEngineARM::thread_joinall()
 {
-    for (auto &thread : m_threads)
-        thread->join();
+    do
+    {
+        size_t left;
+        std::shared_ptr<ExecutionThread> p;
+
+        {
+            std::lock_guard<std::recursive_mutex> guard(m_threads_lock);
+            left = m_threads.size();
+            if (left)
+                p = *m_threads.begin();
+        }
+
+        if (left)
+            p->join();
+        else
+            break;
+    } while (1);
 }
 
 void UnicornEngineARM::thread_stopall(int retval)
 {
+    std::lock_guard<std::recursive_mutex> guard(m_threads_lock);
     for (auto &thread : m_threads)
         thread->stop();
 }
@@ -243,6 +263,7 @@ UnicornEngineARM::~UnicornEngineARM()
 void UnicornEngineARM::panic_dump_impl(std::shared_ptr<spdlog::logger> logger, int code)
 {
     logger->info("Execution States");
+    std::lock_guard<std::recursive_mutex> guard(m_threads_lock);
     for (auto &p_thread : m_threads)
     {
         bool isRunning = p_thread->state() == ExecutionThread::THREAD_EXECUTION_STATE::RUNNING;
