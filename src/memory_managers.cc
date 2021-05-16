@@ -58,10 +58,23 @@ uintptr_t MemoryTranslator::translate(const uintptr_t addr) const
     throw std::runtime_error("attempted to translate an unmapped address");
 }
 
+#include <psp2cldr/logger.hpp>
 uintptr_t MemoryTranslator::add(uintptr_t addr, size_t length, uintptr_t ptr)
 {
     std::lock_guard guard{m_lock};
-    // TODO: collision checks
+#ifndef NDEBUG
+    for (auto &entry : m_memory_map)
+    {
+        auto rg = entry.first;
+        if (addr >= rg.second || rg.first >= addr + length)
+        {
+            continue;
+        }
+
+        LOG(CRITICAL, "memory collision: {:#010x}-{:#010x} {:#010x}-{:#010x}", rg.first, rg.second, addr, addr + length);
+        throw std::runtime_error("memory collision detected");
+    }
+#endif
     m_memory_map[std::make_pair(addr, addr + length)] = ptr;
     return addr;
 }

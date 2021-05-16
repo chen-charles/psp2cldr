@@ -62,7 +62,7 @@ public:
 
 protected:
     // ramge [a, b) -> translated base
-    mutable std::mutex m_lock;
+    mutable std::recursive_mutex m_lock;
     std::map<range, uintptr_t> m_memory_map;
 };
 
