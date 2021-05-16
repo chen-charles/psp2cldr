@@ -144,6 +144,7 @@ protected:
     std::atomic<bool> m_stop_called = false;
 
     std::thread m_thread;
+    std::mutex join_lock;
 };
 
 class UnicornEngineARM : public ExecutionCoordinator

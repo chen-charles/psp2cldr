@@ -73,6 +73,8 @@ ExecutionThread_Unicorn::~ExecutionThread_Unicorn()
     if (m_thread.joinable())
         m_thread.join();
 
+    uc_hook_del(m_engine, m_hook_insn_invalid);
+    uc_hook_del(m_engine, m_hook_mem_invalid);
     uc_close(m_engine);
 }
 
@@ -178,6 +180,8 @@ ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Unicorn::join(uint32_t 
             return m_result;
         }
     }
+
+    std::lock_guard guard{join_lock};
 
     if (m_thread.joinable())
     {

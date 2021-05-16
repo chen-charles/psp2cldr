@@ -73,10 +73,23 @@ void _sig_handler(int sig, siginfo_t *info, void *ucontext)
 
     if (!exec_thread)
     {
-        if (coord->m_old_action.sa_flags & SA_SIGINFO)
-            (coord->m_old_action.sa_sigaction)(sig, info, ucontext);
-        else
-            (coord->m_old_action.sa_handler)(sig);
+        switch (sig)
+        {
+        case SIGSEGV:
+            if (coord->m_old_action_segv.sa_flags & SA_SIGINFO)
+                (coord->m_old_action_segv.sa_sigaction)(sig, info, ucontext);
+            else
+                (coord->m_old_action_segv.sa_handler)(sig);
+            return;
+        case SIGILL:
+            if (coord->m_old_action_ill.sa_flags & SA_SIGINFO)
+                (coord->m_old_action_ill.sa_sigaction)(sig, info, ucontext);
+            else
+                (coord->m_old_action_ill.sa_handler)(sig);
+            return;
+        default:
+            throw std::logic_error("unexpected signal");
+        }
     }
 
     auto ctx = reinterpret_cast<ucontext_t *>(ucontext);
