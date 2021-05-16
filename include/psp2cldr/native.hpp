@@ -161,6 +161,7 @@ public:
 protected:
     MemoryTranslator m_translator;
     MemoryAllocator m_allocator;
+    std::recursive_mutex m_memory_lock;
 
 protected:
     std::function<void(ExecutionCoordinator &, ExecutionThread &, uint32_t)> m_intr_callback = {};

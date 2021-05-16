@@ -151,6 +151,9 @@ DEFINE_VITA_IMP_NID_EXPORT(F9C9C52F, 632980D7)
 The provider module needs to be compiled as a shared library for the **HOST** platform. Please see `sample_implementations/`.  
 It is recommended to use `-fvisibility=hidden` with `GNU Tools`, or equivalent flags on other compilers, to avoid exporting unnecessary symbols.  
 
+### Thread Safety
+Please be aware that there **will** be multiple threads running concurrently if the backend supports multithreading.  It is also possible for two threads to call the same provider function at exactly the same time (i.e., `static` variables defined inside the function are not safe).  
+
 ### Notes on Variables
 #### ELF
 Suppose `rel.r_offset` has a value of `0xABCD`, which once loaded, is translated to `0xAAAAAAAA`, then,  

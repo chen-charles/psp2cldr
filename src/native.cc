@@ -275,6 +275,7 @@ void ExecutionThread_Native::stop(uint32_t retval)
 
 uintptr_t NativeEngineARM::mmap(uintptr_t preferred, size_t length)
 {
+    std::lock_guard g{m_memory_lock};
     auto ptr = m_allocator.alloc(0x1000, length);
     m_translator.add(ptr, length, ptr);
     return ptr;
@@ -282,6 +283,7 @@ uintptr_t NativeEngineARM::mmap(uintptr_t preferred, size_t length)
 
 int NativeEngineARM::munmap(uintptr_t addr, size_t length)
 {
+    std::lock_guard g{m_memory_lock};
     auto ptr = m_translator.translate(addr);
     m_translator.erase(addr, length);
     m_allocator.free(ptr);

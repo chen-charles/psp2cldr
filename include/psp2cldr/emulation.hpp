@@ -172,6 +172,7 @@ protected:
     MemoryScheduler m_scheduler{0x1000, std::make_pair(0x400000, 0x20000000)};
     MemoryTranslator m_translator;
     MemoryAllocator m_allocator;
+    std::recursive_mutex m_memory_lock;
 
 protected:
     std::function<void(ExecutionCoordinator &, ExecutionThread &, uint32_t)> m_intr_callback = {};

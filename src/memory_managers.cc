@@ -48,6 +48,7 @@ int MemoryScheduler::munmap(uintptr_t addr, size_t length)
 
 uintptr_t MemoryTranslator::translate(const uintptr_t addr) const
 {
+    std::lock_guard guard{m_lock};
     auto it = std::upper_bound(m_memory_map.begin(), m_memory_map.end(), addr, [](auto &left, auto &right)
                                { return right.first.second > left; }); // first range [a, b) that has b > addr
 
@@ -59,6 +60,7 @@ uintptr_t MemoryTranslator::translate(const uintptr_t addr) const
 
 uintptr_t MemoryTranslator::add(uintptr_t addr, size_t length, uintptr_t ptr)
 {
+    std::lock_guard guard{m_lock};
     // TODO: collision checks
     m_memory_map[std::make_pair(addr, addr + length)] = ptr;
     return addr;
@@ -66,6 +68,7 @@ uintptr_t MemoryTranslator::add(uintptr_t addr, size_t length, uintptr_t ptr)
 
 int MemoryTranslator::erase(uintptr_t addr, size_t length)
 {
+    std::lock_guard guard{m_lock};
     auto it = m_memory_map.find(std::make_pair(addr, addr + length));
     if (it == m_memory_map.end())
         throw std::runtime_error("attempted to erase an unmapped region");

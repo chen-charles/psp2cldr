@@ -5,6 +5,7 @@
 
 #include <map>
 #include <memory>
+#include <mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -38,6 +39,7 @@ protected:
     size_t m_alignment;
 };
 
+// MT-safe
 class MemoryTranslator
 {
 public:
@@ -52,10 +54,15 @@ public:
     virtual uintptr_t add(uintptr_t addr, size_t length, uintptr_t ptr); // returns addr
     virtual int erase(uintptr_t addr, size_t length);
 
-    const std::map<range, uintptr_t> &memory_map() const { return m_memory_map; };
+    const std::map<range, uintptr_t> memory_map() const
+    {
+        std::lock_guard guard{m_lock};
+        return m_memory_map;
+    };
 
 protected:
     // ramge [a, b) -> translated base
+    mutable std::mutex m_lock;
     std::map<range, uintptr_t> m_memory_map;
 };
 

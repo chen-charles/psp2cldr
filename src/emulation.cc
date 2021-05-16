@@ -78,6 +78,7 @@ ExecutionThread_Unicorn::~ExecutionThread_Unicorn()
 
 uintptr_t UnicornEngineARM::mmap(uintptr_t preferred, size_t length)
 {
+    std::lock_guard g{m_memory_lock};
     auto aligned_length = m_scheduler.align(length);
     auto addr = m_scheduler.mmap(preferred, aligned_length);
     if (addr)
@@ -98,6 +99,7 @@ uintptr_t UnicornEngineARM::mmap(uintptr_t preferred, size_t length)
 
 int UnicornEngineARM::munmap(uintptr_t addr, size_t length)
 {
+    std::lock_guard g{m_memory_lock};
     auto aligned_length = m_scheduler.align(length);
     auto ptr = m_translator.translate(addr);
 
