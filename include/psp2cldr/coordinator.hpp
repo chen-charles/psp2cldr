@@ -39,7 +39,10 @@ public:
     {
         std::lock_guard guard{tls_mutex};
         for (auto &key : tls)
-            free((uintptr_t)key);
+        {
+            std::lock_guard g{key->lock};
+            key->mapping.erase(m_id);
+        }
     }
 
     uintptr_t alloc()
