@@ -115,6 +115,7 @@ protected:
     std::atomic<bool> m_started{false};
     std::atomic<bool> m_handling_interrupt{false};
     std::atomic<THREAD_EXECUTION_RESULT> m_result;
+    std::mutex join_lock;
 
     std::atomic<uint32_t> m_target_until_point;
     ucontext_t m_return_ctx;
@@ -173,7 +174,8 @@ protected:
     std::unordered_set<std::shared_ptr<ExecutionThread>> m_threads;
 
 protected:
-    struct sigaction m_old_action;
+    struct sigaction m_old_action_ill;
+    struct sigaction m_old_action_segv;
     stack_t m_old_ss;
     char m_sigstack[SIGSTKSZ] __attribute__((aligned(16)));
 };

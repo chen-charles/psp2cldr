@@ -249,8 +249,16 @@ ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Native::join(uint32_t *
 {
     if (m_state != THREAD_EXECUTION_STATE::UNSTARTED)
     {
+        std::lock_guard guard{join_lock};
+
         void *thread_retval;
-        auto err = pthread_join(m_thread, &thread_retval);
+        int err = 0;
+
+        if (pthread_kill(m_thread, 0) == 0)
+        {
+            err = pthread_join(m_thread, &thread_retval);
+        }
+
         if (err == 0 || err == EINVAL)
         {
             if (m_result == THREAD_EXECUTION_RESULT::STOP_UNTIL_POINT_HIT && retval != nullptr)
@@ -431,20 +439,24 @@ NativeEngineARM::NativeEngineARM() : ExecutionCoordinator()
         sigfillset(&action.sa_mask);
         action.sa_sigaction = _sig_handler;
         action.sa_flags = SA_SIGINFO | SA_ONSTACK;
-        if (sigaction(SIGILL, &action, &m_old_action) == 0)
+        if (sigaction(SIGILL, &action, &m_old_action_ill) == 0)
         {
-            union sigval sig_v;
-            sig_v.sival_ptr = this;
-            if (sigqueue(getpid(), SIGILL, sig_v) == 0)
+            if (sigaction(SIGSEGV, &action, &m_old_action_segv) == 0)
             {
-                // setup complete
-                return;
+                union sigval sig_v;
+                sig_v.sival_ptr = this;
+                if (sigqueue(getpid(), SIGILL, sig_v) == 0)
+                {
+                    // setup complete
+                    return;
+                }
+                else
+                {
+                    LOG(CRITICAL, "sigqueue failed with error: {}", strerror(errno));
+                }
+                sigaction(SIGSEGV, &m_old_action_segv, NULL);
             }
-            else
-            {
-                LOG(CRITICAL, "sigqueue failed with error: {}", strerror(errno));
-            }
-            sigaction(SIGILL, &m_old_action, NULL);
+            sigaction(SIGILL, &m_old_action_ill, NULL);
         }
         else
         {
@@ -462,6 +474,7 @@ NativeEngineARM::NativeEngineARM() : ExecutionCoordinator()
 
 NativeEngineARM::~NativeEngineARM()
 {
-    sigaction(SIGILL, &m_old_action, NULL);
+    sigaction(SIGILL, &m_old_action_ill, NULL);
+    sigaction(SIGSEGV, &m_old_action_segv, NULL);
     sigaltstack(&m_old_ss, NULL);
 }
