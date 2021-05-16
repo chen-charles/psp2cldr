@@ -106,6 +106,14 @@ int UnicornEngineARM::munmap(uintptr_t addr, size_t length)
     m_translator.erase(addr, aligned_length);
     m_scheduler.munmap(addr, aligned_length);
     m_allocator.free(ptr);
+
+    std::lock_guard<std::recursive_mutex> guard(m_threads_lock);
+    for (auto &thread : m_threads)
+    {
+        auto casted = std::dynamic_pointer_cast<ExecutionThread_Unicorn>(thread);
+        auto err = casted->unmap_ptr(addr, aligned_length);
+        assert_uc_err(err, "unicorn returned failure for mmap");
+    }
     return 0;
 }
 

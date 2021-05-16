@@ -126,6 +126,11 @@ public:
         return uc_mem_map_ptr(m_engine, address, size, UC_PROT_READ | UC_PROT_WRITE | UC_PROT_EXEC, ptr);
     }
 
+    uc_err unmap_ptr(uint64_t address, size_t size)
+    {
+        return uc_mem_unmap(m_engine, address, size);
+    }
+
 protected:
     uc_engine *m_engine;
     ExecutionCoordinator &m_coord;
