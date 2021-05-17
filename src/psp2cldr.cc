@@ -227,7 +227,8 @@ order of supplying <nid_implementation_libraries> matters, the first observance 
         }
         else
         {
-            LOG(WARN, "{} is not a regular file, skipped", argv[i]);
+            LOG(WARN, "{} is not a regular file/folder, treated as a file", argv[i]);
+            pool->add_provider(std::make_shared<Provider_DynamicallyLinkedLibrary>(arg.string()));
         }
     }
     pool->add_provider(std::make_shared<Provider_StaticallyLinkedLibrary>());
