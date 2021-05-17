@@ -469,11 +469,15 @@ NativeEngineARM::NativeEngineARM() : ExecutionCoordinator()
                 }
                 sigaction(SIGSEGV, &m_old_action_segv, NULL);
             }
+            else
+            {
+                LOG(CRITICAL, "sigaction for SIGSEGV failed with error: {}", strerror(errno));
+            }
             sigaction(SIGILL, &m_old_action_ill, NULL);
         }
         else
         {
-            LOG(CRITICAL, "sigaction failed with error: {}", strerror(errno));
+            LOG(CRITICAL, "sigaction for SIGILL failed with error: {}", strerror(errno));
         }
         sigaltstack(&m_old_ss, NULL);
     }
