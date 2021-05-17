@@ -41,6 +41,7 @@ if (${FIND_ARMv7A_RET} GREATER "0")
     if("${HAVE_SETCONTEXT}" AND "${HAVE_GETCONTEXT}" AND "${HAVE_SIGQUEUE}" AND "${HAVE_SIGQUEUE}")
         message(STATUS "Using PSP2CLDR_NATIVE")
         add_compile_definitions(PSP2CLDR_NATIVE=1)
+        add_compile_options(-fstack-protector-strong)
         target_sources(psp2cldr PRIVATE "include/psp2cldr/native.hpp" "src/native.cc")
 
     else()

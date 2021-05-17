@@ -4,6 +4,7 @@
 #include <mutex>
 #include <psp2cldr/logger.hpp>
 
+static std::mutex tls_mutex;
 #undef __psp2cldr__internal_tls_ctrl
 DEFINE_VITA_IMP_SYM_EXPORT(__psp2cldr__internal_tls_ctrl)
 {
@@ -14,11 +15,12 @@ DEFINE_VITA_IMP_SYM_EXPORT(__psp2cldr__internal_tls_ctrl)
     */
     auto ctrl = PARAM_0;
 
+    std::lock_guard guard(tls_mutex);
+
     static std::unordered_map<uint32_t, uint32_t> mapping;
-    static std::mutex _mutex;
+
     auto tid = ctx->thread.tid();
 
-    std::lock_guard guard(_mutex);
     switch (ctrl)
     {
     case 0:

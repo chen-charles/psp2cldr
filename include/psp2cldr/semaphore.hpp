@@ -10,12 +10,13 @@ class semaphore
 {
 public:
     semaphore(uintptr_t initial = 0) : m_ct(initial) {}
-    virtual ~semaphore(){}
+    virtual ~semaphore() {}
 
     void acquire()
     {
         std::unique_lock lk{m_lock};
-        m_cv.wait(lk, [&](){ return m_ct; });
+        m_cv.wait(lk, [&]()
+                  { return m_ct; });
         m_ct--;
     }
 
@@ -23,10 +24,13 @@ public:
     bool acquire_for(std::chrono::duration<Rep, Period> dur)
     {
         std::unique_lock lk{m_lock};
-        if (m_cv.wait_for(lk, dur, [&](){ return m_ct; }) == std::cv_status::timeout)
-            return false;
-        m_ct--;
-        return true;
+        if (m_cv.wait_for(lk, dur, [&]()
+                          { return m_ct; }))
+        {
+            m_ct--;
+            return true;
+        }
+        return false;
     }
 
     bool try_acquire()
@@ -53,12 +57,12 @@ protected:
     uintptr_t m_ct = 0;
 };
 
-template<class T, std::enable_if_t<std::is_base_of_v<semaphore, T>>>
+template <class T>
 class semaphore_guard
 {
 public:
     semaphore_guard(T &sema) : m_sema(sema) { m_sema.acquire(); }
-    semaphore_guard(const semaphore_guard &) = delete;
+    semaphore_guard(const T &) = delete;
     virtual ~semaphore_guard() { m_sema.release(); }
 
 private:
