@@ -6,32 +6,6 @@ env:
   BUILD_TYPE: Release
 
 jobs:
-  emulation:
-    runs-on: ubuntu-latest
-    container: fedora:latest
-
-    steps:
-    - uses: actions/checkout@v2
-
-    - name: Check Updates
-      run: dnf check-update
-      continue-on-error: true
-
-    - name: Install Dependencies
-      run: dnf install -y spdlog-devel unicorn-devel cmake gcc gcc-c++
-
-    - name: Create Build Environment
-      shell: bash
-      run: cmake -E make_directory ${GITHUB_WORKSPACE}/build
-
-    - name: Configure CMake
-      shell: bash
-      run: cmake -S ${GITHUB_WORKSPACE} -B ${GITHUB_WORKSPACE}/build -DCMAKE_BUILD_TYPE=$BUILD_TYPE
-
-    - name: Build
-      shell: bash
-      run: cmake --build ${GITHUB_WORKSPACE}/build --config $BUILD_TYPE
-
   native:
     runs-on: ubuntu-latest
     steps:

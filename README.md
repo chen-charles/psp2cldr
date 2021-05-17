@@ -3,12 +3,10 @@ psp2cldr - PSP2 Custom Loader
 
 Loading *userspace* PSP2 VELFs.  
 
-## Emulation/Native
-**psp2cldr** supports two modes, Native and Emulation.  
-   * Emulation: by [Unicorn-1.x](https://www.unicorn-engine.org/)  
-   * Native: run directly on arm32v7-linux  
+## Native
+**psp2cldr** runs directly on arm32v7-linux  
 
-### Native via Docker
+### via Docker
 `glibc` is required.  
 #### `arm32v7/fedora:33`  
    * Recommended, comes with a working CMake, GCC 10.  
@@ -39,10 +37,6 @@ Note: `DT_NEEDED` tag is respected.
    git clone https://github.com/gabime/spdlog && cd spdlog && mkdir build && cd build && cmake .. && make
    sudo make install
    ```
- * [Unicorn-1.x](https://www.unicorn-engine.org/) for `PSP2CLDR_EMULATION`  
 
 ## License
-**GPLv2**  
-Mostly due to *Unicorn/QEMU*, albeit it is mostly within `emulation.hpp` and `emulation.cc`.  
-Also due to `include/elf.h` for `Windows`.  
-Might consider splitting the `Native` portion into its own if sufficient people complain :D  
+MIT

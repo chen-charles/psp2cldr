@@ -15,73 +15,41 @@ add_executable(psp2cldr
 )
 include_directories(include)
 
-if(MSVC)
-    add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 
-    find_package(spdlog CONFIG REQUIRED)
-    target_link_libraries(psp2cldr PRIVATE spdlog::spdlog)
+find_package(spdlog REQUIRED)
+target_link_libraries(psp2cldr PRIVATE spdlog::spdlog)
 
-    add_compile_definitions(PSP2CLDR_EMULATION=1)
-    target_sources(psp2cldr PRIVATE "include/psp2cldr/emulation.hpp" "src/emulation.cc")
+target_link_libraries(psp2cldr PRIVATE stdc++fs)    # std::experimental::filesystem for gcc 7 and std::filesystem for gcc 8
 
-    # find_package(unicorn REQUIRED)
-    # target_link_libraries(psp2cldr PRIVATE unicorn::unicorn)
-    target_link_libraries(psp2cldr PRIVATE ${CMAKE_SOURCE_DIR}/unicorn.lib)
+include(CheckSymbolExists)
+list(APPEND CMAKE_REQUIRED_DEFINITIONS -D_GNU_SOURCE)   # pthread_sigqueue etc.
+list(APPEND CMAKE_REQUIRED_LIBRARIES ${CMAKE_DL_LIBS})
+check_symbol_exists(dlmopen "dlfcn.h" HAVE_DLMOPEN)
 
-else()
-    add_definitions(-fvisibility=hidden)
+target_link_libraries(psp2cldr PRIVATE ${CMAKE_DL_LIBS})
 
-    find_package(spdlog REQUIRED)
-    target_link_libraries(psp2cldr PRIVATE spdlog::spdlog)
+execute_process(COMMAND ${CMAKE_C_COMPILER} -dM -E -
+                INPUT_FILE /dev/null
+                OUTPUT_VARIABLE PSP2CLDR_MACROS)
+string(FIND ${PSP2CLDR_MACROS} "__ARM_ARCH_7A__" FIND_ARMv7A_RET)
+if (${FIND_ARMv7A_RET} GREATER "0")
+    check_symbol_exists(setcontext "ucontext.h" HAVE_SETCONTEXT)
+    check_symbol_exists(getcontext "ucontext.h" HAVE_GETCONTEXT)
+    check_symbol_exists(sigqueue "signal.h" HAVE_SIGQUEUE)
+    check_symbol_exists(sigaction "signal.h" HAVE_SIGACTION)
 
-    target_link_libraries(psp2cldr PRIVATE stdc++fs)    # std::experimental::filesystem for gcc 7 and std::filesystem for gcc 8
+    if("${HAVE_SETCONTEXT}" AND "${HAVE_GETCONTEXT}" AND "${HAVE_SIGQUEUE}" AND "${HAVE_SIGQUEUE}")
+        message(STATUS "Using PSP2CLDR_NATIVE")
+        add_compile_definitions(PSP2CLDR_NATIVE=1)
+        target_sources(psp2cldr PRIVATE "include/psp2cldr/native.hpp" "src/native.cc")
 
-    include(CheckSymbolExists)
-    list(APPEND CMAKE_REQUIRED_DEFINITIONS -D_GNU_SOURCE)   # pthread_sigqueue etc.
-    list(APPEND CMAKE_REQUIRED_LIBRARIES ${CMAKE_DL_LIBS})
-    check_symbol_exists(dlmopen "dlfcn.h" HAVE_DLMOPEN)
-
-    target_link_libraries(psp2cldr PRIVATE ${CMAKE_DL_LIBS})
-
-    while (TRUE)
-        execute_process(COMMAND ${CMAKE_C_COMPILER} -dM -E -
-                        INPUT_FILE /dev/null
-                        OUTPUT_VARIABLE PSP2CLDR_MACROS)
-        string(FIND ${PSP2CLDR_MACROS} "__ARM_ARCH_7A__" FIND_ARMv7A_RET)
-        if (${FIND_ARMv7A_RET} GREATER "0")
-            check_symbol_exists(setcontext "ucontext.h" HAVE_SETCONTEXT)
-            check_symbol_exists(getcontext "ucontext.h" HAVE_GETCONTEXT)
-            check_symbol_exists(sigqueue "signal.h" HAVE_SIGQUEUE)
-            check_symbol_exists(sigaction "signal.h" HAVE_SIGACTION)
-
-            if("${HAVE_SETCONTEXT}" AND "${HAVE_GETCONTEXT}" AND "${HAVE_SIGQUEUE}" AND "${HAVE_SIGQUEUE}")
-                message(STATUS "Using PSP2CLDR_NATIVE")
-                add_compile_definitions(PSP2CLDR_NATIVE=1)
-                add_definitions(-funwind-tables)
-                target_sources(psp2cldr PRIVATE "include/psp2cldr/native.hpp" "src/native.cc")
-                break()
-            else()
-                unset(HAVE_SETCONTEXT CACHE)
-                unset(HAVE_GETCONTEXT CACHE)
-                unset(HAVE_SIGQUEUE CACHE)
-                unset(HAVE_SIGACTION CACHE)
-                message(WARNING "PSP2CLDR_NATIVE requirement check failed, falling back")
-            endif() 
-        endif()
-        
-        # default: use emulation
-        message(STATUS "Using PSP2CLDR_EMULATION")
-        add_compile_definitions(PSP2CLDR_EMULATION=1)
-        target_sources(psp2cldr PRIVATE "include/psp2cldr/emulation.hpp" "src/emulation.cc")
-
-        find_package(PkgConfig REQUIRED) 
-        pkg_check_modules(unicorn REQUIRED IMPORTED_TARGET unicorn)
-        find_package(Threads REQUIRED)
-        target_link_libraries(psp2cldr PRIVATE PkgConfig::unicorn Threads::Threads)
-
-        break()
-
-    endwhile()
+    else()
+        unset(HAVE_SETCONTEXT CACHE)
+        unset(HAVE_GETCONTEXT CACHE)
+        unset(HAVE_SIGQUEUE CACHE)
+        unset(HAVE_SIGACTION CACHE)
+        message(FATAL_ERROR "PSP2CLDR_NATIVE requirement unsatisfied")
+    endif() 
 endif()
 
 if (${BUILD_SAMPLES})
