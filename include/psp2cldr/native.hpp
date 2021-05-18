@@ -5,6 +5,8 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include <setjmp.h>
+
 #include <pthread.h>
 #include <signal.h>
 #include <ucontext.h>
@@ -113,24 +115,26 @@ protected:
 
     std::atomic<THREAD_EXECUTION_STATE> m_state{THREAD_EXECUTION_STATE::UNSTARTED};
     std::atomic<bool> m_started{false};
-    std::atomic<bool> m_handling_interrupt{false};
     std::atomic<THREAD_EXECUTION_RESULT> m_result;
+
     std::mutex join_lock;
 
     std::atomic<uint32_t> m_target_until_point;
-    ucontext_t m_return_ctx;
-
     mutable ucontext_t m_target_ctx;
+    sigjmp_buf m_return_ctx;
     siginfo_t m_target_siginfo;
+
+    stack_t m_old_ss;
+    char m_sigstack[SIGSTKSZ] __attribute__((aligned(16)));
 
     // friends: m_target_ctx should only be modified by const types
     friend class NativeMemoryAccessProxy;
     friend class RegisterAccessProxy_Native;
     friend void _sig_handler(int sig, siginfo_t *info, void *ucontext);
     friend void *thread_bootstrap(ExecutionThread_Native *thread);
-#define DO_RETURN_STACK_SZ 0x1000
-    char do_return_stack[DO_RETURN_STACK_SZ] __attribute__((aligned(16)));
 };
+static_assert(std::atomic<bool>::is_always_lock_free);
+static_assert(std::atomic<uint32_t>::is_always_lock_free);
 
 class NativeEngineARM : public ExecutionCoordinator
 {
@@ -140,7 +144,6 @@ public:
 
     virtual NativeMemoryAccessProxy &proxy() const
     {
-        static NativeMemoryAccessProxy static_proxy(m_translator);
         return static_proxy;
     }
 
@@ -163,6 +166,7 @@ protected:
     MemoryTranslator m_translator;
     MemoryAllocator m_allocator;
     std::recursive_mutex m_memory_lock;
+    mutable NativeMemoryAccessProxy static_proxy{m_translator};
 
 protected:
     std::function<void(ExecutionCoordinator &, ExecutionThread &, uint32_t)> m_intr_callback = {};
