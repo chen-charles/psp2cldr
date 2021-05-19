@@ -178,6 +178,15 @@ void InterruptContext::panic(int code)
     coord.thread_stopall(code);
     PANIC_LOG("code={:#x}", code);
     PANIC_LOG("called from thread: {:#x}", thread.tid());
+
+    PANIC_LOG("Loaded Modules");
+    for (auto &entry : load.libs_loaded)
+    {
+        auto &lib_name = entry.first;
+        auto &load_info = entry.second;
+        PANIC_LOG("{:#010x}-{:#010x} {}", load_info.first, load_info.first + load_info.second, lib_name);
+    }
+
     coord.panic(code, &load);
 #ifdef _MSC_VER
     __debugbreak();
