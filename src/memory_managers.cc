@@ -119,6 +119,7 @@ void MemoryAllocator::free(uintptr_t ptr)
 #ifdef _MSC_VER
     _aligned_free((void *)ptr);
 #else
-    munmap((void *)ptr, length);
+    if (munmap((void *)ptr, length) == -1)
+        throw std::runtime_error(strerror(errno));
 #endif
 }
