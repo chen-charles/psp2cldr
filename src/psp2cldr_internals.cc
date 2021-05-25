@@ -4,45 +4,44 @@
 #include <mutex>
 #include <psp2cldr/logger.hpp>
 
-static std::mutex tls_mutex;
-#undef __psp2cldr__internal_tls_ctrl
-DEFINE_VITA_IMP_SYM_EXPORT(__psp2cldr__internal_tls_ctrl)
+#undef __psp2cldr__internal_tls_alloc
+DEFINE_VITA_IMP_SYM_EXPORT(__psp2cldr__internal_tls_alloc)
 {
     DECLARE_VITA_IMP_TYPE(FUNCTION);
-    /*
-    0: retrieve tls ptr
-    1: free tls
-    */
-    auto ctrl = PARAM_0;
 
-    std::lock_guard guard(tls_mutex);
+    TARGET_RETURN(ctx->thread.tls.alloc());
+    HANDLER_RETURN(0);
+}
 
-    static std::unordered_map<uint32_t, uint32_t> mapping;
+#undef __psp2cldr__internal_tls_free
+DEFINE_VITA_IMP_SYM_EXPORT(__psp2cldr__internal_tls_free)
+{
+    DECLARE_VITA_IMP_TYPE(FUNCTION);
 
-    auto tid = ctx->thread.tid();
+    ctx->thread.tls.free(PARAM_0);
 
-    switch (ctrl)
-    {
-    case 0:
-        if (mapping.count(tid) == 0)
-            mapping[tid] = ctx->coord.mmap(0, 0x1000);
-        TARGET_RETURN(mapping[tid]);
-        HANDLER_RETURN(0);
-    case 1:
-        if (mapping.count(tid) == 0)
-        {
-            LOG(CRITICAL, "attempted to free TLS, but it doesn't exist");
-            HANDLER_RETURN(1);
-        }
-        ctx->coord.munmap(mapping[tid], 0x1000);
-        mapping.erase(tid);
-        TARGET_RETURN(0);
-        HANDLER_RETURN(0);
-        break;
-    default:
-        LOG(CRITICAL, "unrecognized ctrl value");
-        HANDLER_RETURN(2);
-    }
+    TARGET_RETURN(0);
+    HANDLER_RETURN(0);
+}
+
+#undef __psp2cldr__internal_tls_setvalue
+DEFINE_VITA_IMP_SYM_EXPORT(__psp2cldr__internal_tls_setvalue)
+{
+    DECLARE_VITA_IMP_TYPE(FUNCTION);
+
+    ctx->thread.tls.set(PARAM_0, PARAM_1);
+
+    TARGET_RETURN(0);
+    HANDLER_RETURN(0);
+}
+
+#undef __psp2cldr__internal_tls_getvalue
+DEFINE_VITA_IMP_SYM_EXPORT(__psp2cldr__internal_tls_getvalue)
+{
+    DECLARE_VITA_IMP_TYPE(FUNCTION);
+
+    TARGET_RETURN(ctx->thread.tls.get(PARAM_0));
+    HANDLER_RETURN(0);
 }
 
 #include <psp2cldr/provider.hpp>
