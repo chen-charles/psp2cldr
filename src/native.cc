@@ -37,10 +37,16 @@ uint32_t RegisterAccessProxy_Native::r() const
 void _sig_handler(int sig, siginfo_t *info, void *ucontext)
 {
     static NativeEngineARM *coord = NULL;
-    if (info->si_code == SI_QUEUE && info->si_value.sival_ptr != NULL)
+    bool is_stop = false;
+    if (info->si_code == SI_QUEUE)
     {
-        coord = reinterpret_cast<NativeEngineARM *>(info->si_value.sival_ptr);
-        return;
+        if (info->si_value.sival_ptr != NULL)
+        {
+            coord = reinterpret_cast<NativeEngineARM *>(info->si_value.sival_ptr);
+            return;
+        }
+        else
+            is_stop = true;
     }
 
     if (!coord)
@@ -55,6 +61,9 @@ void _sig_handler(int sig, siginfo_t *info, void *ucontext)
     ExecutionThread_Native *exec_thread = reinterpret_cast<ExecutionThread_Native *>(pthread_getspecific(thread_obj_key));
     if (!exec_thread)
     {
+        if (is_stop) // the thread is already dead, ignore the stop request
+            return;
+
         LOG(CRITICAL, "did not find an exec_thread, falling back to default signal action, PC={:#010x}", ctx->uc_mcontext.arm_pc);
         switch (sig)
         {
@@ -185,10 +194,11 @@ _done:
     pthread_setspecific(thread_obj_key, NULL);
 
     _execute_recover_until_point(thread->m_target_until_point, thread->m_until_point_instr_backup, thread->m_coord.proxy());
-    thread->m_result = result;
 
-    thread->m_started = false;
+    thread->m_result = result;
     thread->m_state = ExecutionThread::THREAD_EXECUTION_STATE::RESTARTABLE;
+    thread->m_started = false;
+
     return NULL;
 }
 
@@ -234,6 +244,11 @@ ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Native::start(uint32_t 
         throw std::runtime_error("pthread_create failed");
     }
 
+    {
+        std::lock_guard guard{m_thread_lock};
+        m_thread_is_valid = true;
+    }
+
     m_state = THREAD_EXECUTION_STATE::RUNNING;
     return THREAD_EXECUTION_RESULT::OK;
 }
@@ -247,9 +262,14 @@ ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Native::join(uint32_t *
         void *thread_retval;
         int err = 0;
 
-        if (pthread_kill(m_thread, 0) == 0)
+        // https://udrepper.livejournal.com/16844.html
         {
-            err = pthread_join(m_thread, &thread_retval);
+            std::lock_guard guard{m_thread_lock};
+            if (m_thread_is_valid)
+            {
+                err = pthread_join(m_thread, &thread_retval);
+                m_thread_is_valid = false;
+            }
         }
 
         if (err == 0 || err == EINVAL)
@@ -266,13 +286,16 @@ ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Native::join(uint32_t *
 void ExecutionThread_Native::stop(uint32_t retval)
 {
     m_stop_called = true;
-    if (pthread_kill(m_thread, 0) == 0)
     {
-        if (!pthread_equal(m_thread, pthread_self()))
+        std::lock_guard guard{m_thread_lock};
+        if (m_thread_is_valid)
         {
-            union sigval sig_v;
-            sig_v.sival_ptr = NULL;
-            pthread_sigqueue(m_thread, SIGILL, sig_v);
+            if (!pthread_equal(m_thread, pthread_self()))
+            {
+                union sigval sig_v;
+                sig_v.sival_ptr = NULL;
+                pthread_sigqueue(m_thread, SIGILL, sig_v);
+            }
         }
     }
 }

@@ -108,6 +108,8 @@ protected:
 
     std::function<void(ExecutionCoordinator &, ExecutionThread &, uint32_t)> m_intr_callback = {};
 
+    std::mutex m_thread_lock;
+    bool m_thread_is_valid{false};
     pthread_t m_thread;
     std::atomic<bool> m_stoppable{false};
     std::atomic<bool> m_stop_called{false};
