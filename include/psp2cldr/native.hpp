@@ -176,7 +176,7 @@ protected:
     friend void *thread_bootstrap(ExecutionThread_Native *thread);
 
 protected:
-    std::atomic_flag m_threads_lock;
+    std::mutex m_threads_lock;
     std::unordered_set<std::shared_ptr<ExecutionThread>> m_threads;
 
 protected:

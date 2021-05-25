@@ -331,12 +331,8 @@ int NativeEngineARM::munmap(uintptr_t addr, size_t length)
     thread->register_interrupt_callback(m_intr_callback);
     auto casted = std::dynamic_pointer_cast<ExecutionThread>(thread);
 
-    while (m_threads_lock.test_and_set())
-        ;
-
+    std::lock_guard guard{m_threads_lock};
     m_threads.insert(casted);
-
-    m_threads_lock.clear();
 
     return casted;
 }
@@ -345,18 +341,15 @@ int NativeEngineARM::thread_destroy(std::weak_ptr<ExecutionThread> thread)
 {
     if (auto p = thread.lock())
     {
-        while (m_threads_lock.test_and_set())
-            ;
+        std::lock_guard guard{m_threads_lock};
         if (m_threads.count(p) != 0)
         {
             p->stop();
             p->join();
             m_threads.erase(p);
 
-            m_threads_lock.clear();
             return 0;
         }
-        m_threads_lock.clear();
 
         return 1;
     }
@@ -371,13 +364,11 @@ void NativeEngineARM::thread_joinall()
         std::shared_ptr<ExecutionThread> p;
 
         {
-            while (m_threads_lock.test_and_set())
-                ;
+            std::lock_guard guard{m_threads_lock};
 
             left = m_threads.size();
             if (left)
                 p = *m_threads.begin();
-            m_threads_lock.clear();
         }
 
         if (left)
@@ -389,11 +380,9 @@ void NativeEngineARM::thread_joinall()
 
 void NativeEngineARM::thread_stopall(int retval)
 {
-    while (m_threads_lock.test_and_set())
-        ;
+    std::lock_guard guard{m_threads_lock};
     for (auto &thread : m_threads)
         thread->stop();
-    m_threads_lock.clear();
 }
 
 #include <psp2cldr/context.hpp>
@@ -405,8 +394,8 @@ void ExecutionThread_Native::panic(int code, LoadContext *load)
 void NativeEngineARM::panic(int code, LoadContext *load)
 {
     PANIC_LOG("Backend: NativeEngineARM");
-    while (m_threads_lock.test_and_set())
-        ;
+
+    std::lock_guard guard{m_threads_lock};
     for (auto &p_thread : m_threads)
     {
         PANIC_LOG("Thread: tid={:#x}", p_thread->tid());
@@ -451,7 +440,6 @@ void NativeEngineARM::panic(int code, LoadContext *load)
         {
         }
     }
-    m_threads_lock.clear();
 }
 
 NativeEngineARM::NativeEngineARM() : ExecutionCoordinator()
