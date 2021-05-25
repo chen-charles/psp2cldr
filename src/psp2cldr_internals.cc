@@ -2,6 +2,7 @@
 #include <psp2cldr/imp_provider.hpp>
 
 #include <mutex>
+#include <psp2cldr/handle.hpp>
 #include <psp2cldr/logger.hpp>
 
 #undef __psp2cldr__internal_mmap
@@ -31,12 +32,17 @@ DEFINE_VITA_IMP_SYM_EXPORT(__psp2cldr__internal_panic)
     HANDLER_RETURN(1);
 }
 
+static HandleStorage<std::shared_ptr<uintptr_t>> tls_mapping(0x100, INT32_MAX);
+
 #undef __psp2cldr__internal_tls_alloc
 DEFINE_VITA_IMP_SYM_EXPORT(__psp2cldr__internal_tls_alloc)
 {
     DECLARE_VITA_IMP_TYPE(FUNCTION);
 
-    TARGET_RETURN(ctx->thread.tls.alloc());
+    uintptr_t tls_key = ctx->thread.tls.alloc();
+    OSL_HANDLE os_key = tls_mapping.alloc(std::make_shared<uintptr_t>(tls_key));
+
+    TARGET_RETURN(os_key);
     HANDLER_RETURN(0);
 }
 
@@ -45,7 +51,17 @@ DEFINE_VITA_IMP_SYM_EXPORT(__psp2cldr__internal_tls_free)
 {
     DECLARE_VITA_IMP_TYPE(FUNCTION);
 
-    ctx->thread.tls.free(PARAM_0);
+    uint32_t key = PARAM_0;
+
+    if (auto tls_key = tls_mapping[key])
+    {
+        ctx->thread.tls.free(*tls_key);
+        tls_mapping.free(key);
+    }
+    else
+    {
+        HANDLER_RETURN(1);
+    }
 
     TARGET_RETURN(0);
     HANDLER_RETURN(0);
@@ -56,9 +72,19 @@ DEFINE_VITA_IMP_SYM_EXPORT(__psp2cldr__internal_tls_setvalue)
 {
     DECLARE_VITA_IMP_TYPE(FUNCTION);
 
-    ctx->thread.tls.set(PARAM_0, PARAM_1);
+    uint32_t key = PARAM_0;
+    uint32_t value = PARAM_1;
 
-    TARGET_RETURN(0);
+    if (auto tls_key = tls_mapping[key])
+    {
+        ctx->thread.tls.set(*tls_key, value);
+        TARGET_RETURN(0);
+    }
+    else
+    {
+        TARGET_RETURN(5);
+    }
+
     HANDLER_RETURN(0);
 }
 
@@ -66,8 +92,17 @@ DEFINE_VITA_IMP_SYM_EXPORT(__psp2cldr__internal_tls_setvalue)
 DEFINE_VITA_IMP_SYM_EXPORT(__psp2cldr__internal_tls_getvalue)
 {
     DECLARE_VITA_IMP_TYPE(FUNCTION);
+    uint32_t key = PARAM_0;
 
-    TARGET_RETURN(ctx->thread.tls.get(PARAM_0));
+    if (auto tls_key = tls_mapping[key])
+    {
+        TARGET_RETURN(ctx->thread.tls.get(*tls_key));
+    }
+    else
+    {
+        HANDLER_RETURN(1);
+    }
+
     HANDLER_RETURN(0);
 }
 
