@@ -198,7 +198,7 @@ class ExecutionThread;
 class InterruptContext
 {
 public:
-    InterruptContext(ExecutionCoordinator &coord, ExecutionThread &thread, LoadContext &load) : load(load), coord(coord), thread(thread) {}
+    InterruptContext(ExecutionCoordinator &coord, ExecutionThread &thread, LoadContext &load) : coord(coord), thread(thread), load(load) {}
     virtual ~InterruptContext() {}
 
     template <typename... Targs>
