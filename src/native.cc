@@ -64,7 +64,7 @@ void _sig_handler(int sig, siginfo_t *info, void *ucontext)
         if (is_stop) // the thread is already dead, ignore the stop request
             return;
 
-        LOG(CRITICAL, "did not find an exec_thread, falling back to default signal action, PC={:#010x}", ctx->uc_mcontext.arm_pc);
+        LOG(CRITICAL, "did not find an exec_thread, falling back to default signal action, PC={:#010x}, LR={:#010x}", ctx->uc_mcontext.arm_pc, ctx->uc_mcontext.arm_lr);
         switch (sig)
         {
         case SIGSEGV:
@@ -152,7 +152,7 @@ _execute_signal_callback:
     if (thread->m_target_ctx.uc_mcontext.arm_pc != thread->m_target_until_point)
     {
         LOG(TRACE, "execute({}): handling interrupt si_signo={:#x}", thread->tid(), thread->m_target_siginfo.si_signo);
-        if (thread->m_target_siginfo.si_signo == SIGILL)
+        if (thread->m_target_siginfo.si_signo == SIGILL || thread->m_target_siginfo.si_signo == SIGSEGV)
         {
             thread->m_intr_callback(thread->m_coord, *thread, thread->m_target_siginfo.si_signo);
 
@@ -238,14 +238,16 @@ ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Native::start(uint32_t 
     }
 
     m_target_until_point = until;
-    if (pthread_create(&m_thread, NULL, (void *(*)(void *))thread_bootstrap, this) != 0)
-    {
-        _execute_recover_until_point(until, m_until_point_instr_backup, m_coord.proxy());
-        throw std::runtime_error("pthread_create failed");
-    }
 
     {
         std::lock_guard guard{m_thread_lock};
+
+        if (pthread_create(&m_thread, NULL, (void *(*)(void *))thread_bootstrap, this) != 0)
+        {
+            _execute_recover_until_point(until, m_until_point_instr_backup, m_coord.proxy());
+            throw std::runtime_error("pthread_create failed");
+        }
+
         m_thread_is_valid = true;
     }
 
@@ -257,17 +259,23 @@ ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Native::join(uint32_t *
 {
     if (m_state != THREAD_EXECUTION_STATE::UNSTARTED)
     {
-        std::lock_guard guard{join_lock};
+        std::lock_guard guard{join_lock}; // only one thread would be calling pthread_join & modify m_thread_is_valid
 
         void *thread_retval;
         int err = 0;
 
         // https://udrepper.livejournal.com/16844.html
+        bool is_valid;
         {
             std::lock_guard guard{m_thread_lock};
-            if (m_thread_is_valid)
+            is_valid = m_thread_is_valid;
+        }
+
+        if (is_valid)
+        {
+            err = pthread_join(m_thread, &thread_retval);
             {
-                err = pthread_join(m_thread, &thread_retval);
+                std::lock_guard guard{m_thread_lock};
                 m_thread_is_valid = false;
             }
         }

@@ -4,6 +4,33 @@
 #include <mutex>
 #include <psp2cldr/logger.hpp>
 
+#undef __psp2cldr__internal_mmap
+DEFINE_VITA_IMP_SYM_EXPORT(__psp2cldr__internal_mmap)
+{
+    DECLARE_VITA_IMP_TYPE(FUNCTION);
+
+    TARGET_RETURN(ctx->coord.mmap(0, PARAM_0));
+    HANDLER_RETURN(0);
+}
+
+#undef __psp2cldr__internal_munmap
+DEFINE_VITA_IMP_SYM_EXPORT(__psp2cldr__internal_munmap)
+{
+    DECLARE_VITA_IMP_TYPE(FUNCTION);
+
+    TARGET_RETURN(ctx->coord.munmap(PARAM_0, PARAM_1));
+    HANDLER_RETURN(0);
+}
+
+#undef __psp2cldr__internal_panic
+DEFINE_VITA_IMP_SYM_EXPORT(__psp2cldr__internal_panic)
+{
+    DECLARE_VITA_IMP_TYPE(FUNCTION);
+
+    LOG(CRITICAL, "__psp2cldr__internal_panic called with reason \"{}\"", ctx->read_str(PARAM_0));
+    HANDLER_RETURN(1);
+}
+
 #undef __psp2cldr__internal_tls_alloc
 DEFINE_VITA_IMP_SYM_EXPORT(__psp2cldr__internal_tls_alloc)
 {
