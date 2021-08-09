@@ -3,8 +3,11 @@
 
 #include <chrono>
 #include <condition_variable>
+#include <memory>
 #include <mutex>
 #include <thread>
+
+#include <psp2cldr/delegate.hpp>
 
 class semaphore
 {
@@ -20,13 +23,73 @@ public:
         m_ct--;
     }
 
+    class canceler
+    {
+        friend class scoped_canceler;
+        mutable semaphore *sema;
+
+    protected:
+        std::atomic<bool> cancelled{false};
+
+    public:
+        class scoped_canceler
+        {
+            const canceler &canc;
+
+        public:
+            scoped_canceler(const canceler &in_canc, semaphore *in_sema)
+                : canc(in_canc)
+            {
+                canc.sema = in_sema;
+            }
+
+            ~scoped_canceler()
+            {
+                canc.on_completed.broadcast();
+                canc.sema = nullptr;
+            }
+        };
+
+        void cancel()
+        {
+            cancelled = true;
+            sema->m_cv.notify_all();
+        }
+
+        bool is_cancelled() const
+        {
+            return cancelled;
+        }
+
+        MulticastDelegate<std::function<void()>> on_completed;
+    };
+
     template <class Rep, class Period>
-    bool acquire_for(std::chrono::duration<Rep, Period> dur)
+    bool cancellable_acquire_for(std::chrono::duration<Rep, Period> dur, const canceler &canc = {})
     {
         std::unique_lock lk{m_lock};
-        if (m_cv.wait_for(lk, dur, [&]()
-                          { return m_ct; }))
+
+        canceler::scoped_canceler scoped(canc, this);
+
+        if (canc.is_cancelled())
         {
+            return false;
+        }
+
+        if (m_cv.wait_for(lk, dur, [&]()
+                          {
+                              if (canc.is_cancelled())
+                              {
+                                  return true;
+                              }
+                              return m_ct != 0;
+                          }))
+        {
+            if (canc.is_cancelled())
+            {
+                return false;
+            }
+
             m_ct--;
             return true;
         }
