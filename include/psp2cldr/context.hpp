@@ -224,15 +224,15 @@ public:
     virtual void panic(int code = 0);
 
 protected:
-    virtual std::shared_ptr<HandlerContinuation> handler_call_target_function_impl(NIDHASH_t nid_hash);
-    virtual std::shared_ptr<HandlerContinuation> handler_call_target_function_impl(std::string name);
+    virtual std::shared_ptr<HandlerContinuation> handler_call_target_function_impl(int n_params, NIDHASH_t nid_hash);
+    virtual std::shared_ptr<HandlerContinuation> handler_call_target_function_impl(int n_params, std::string name);
 
 protected:
     virtual void set_function_call_parameter(int idx, uint32_t value);
 
     std::shared_ptr<HandlerContinuation> handler_call_target_function_unpack(int idx, NIDHASH_t nid_hash)
     {
-        return handler_call_target_function_impl(nid_hash);
+        return handler_call_target_function_impl(idx, nid_hash);
     }
 
     template <typename T>
@@ -251,7 +251,7 @@ protected:
 
     std::shared_ptr<HandlerContinuation> handler_call_target_function_unpack(int idx, std::string name)
     {
-        return handler_call_target_function_impl(name);
+        return handler_call_target_function_impl(idx, name);
     }
 
     template <typename T>

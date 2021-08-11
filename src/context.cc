@@ -8,8 +8,19 @@
 #include <mutex>
 #include <unordered_map>
 
+static void adjust_stack_for_parameters(InterruptContext *ctx, int n_params, bool is_undo = false)
+{
+    if (n_params > 4)
+    {
+        int delta = -4 * (n_params - 4);
+        if (is_undo)
+            delta = -delta;
+        ctx->thread[RegisterAccessProxy::Register::SP]->w(ctx->thread[RegisterAccessProxy::Register::SP]->r() + delta);
+    }
+}
+
 static std::mutex continuation_mutex;
-static std::shared_ptr<HandlerContinuation> _handler_call_target_function_impl(uint32_t target_func_ptr, InterruptContext *ctx)
+static std::shared_ptr<HandlerContinuation> _handler_call_target_function_impl(int n_params, uint32_t target_func_ptr, InterruptContext *ctx)
 {
     sym_stub stub;
     volatile uint32_t stub_loc;
@@ -37,11 +48,16 @@ static std::shared_ptr<HandlerContinuation> _handler_call_target_function_impl(u
 
         stub.name = "__psp2cldr__handler_continuation_to_" + u32_str_repr(target_func_ptr);
         uint32_t original_lr = ctx->thread[RegisterAccessProxy::Register::LR]->r();
+
         uint32_t original_sp = ctx->thread[RegisterAccessProxy::Register::SP]->r();
-        stub.func = [original_lr, original_sp, out](std::string name, Elf32_Sym sym, InterruptContext *p_ctx)
+        adjust_stack_for_parameters(ctx, n_params);
+
+        stub.func = [original_lr, original_sp, out, n_params](std::string name, Elf32_Sym sym, InterruptContext *p_ctx)
         {
             auto r0 = p_ctx->thread[RegisterAccessProxy::Register::R0]->r();
             p_ctx->thread[RegisterAccessProxy::Register::LR]->w(original_lr);
+
+            adjust_stack_for_parameters(p_ctx, n_params, true);
 
             if (original_sp != p_ctx->thread[RegisterAccessProxy::Register::SP]->r())
                 throw std::runtime_error("stack corruption detected");
@@ -68,20 +84,20 @@ static std::shared_ptr<HandlerContinuation> _handler_call_target_function_impl(u
     return out;
 }
 
-std::shared_ptr<HandlerContinuation> InterruptContext::handler_call_target_function_impl(NIDHASH_t nid_hash)
+std::shared_ptr<HandlerContinuation> InterruptContext::handler_call_target_function_impl(int n_params, NIDHASH_t nid_hash)
 {
     if (load.nids_export_locations.count(nid_hash) == 0)
         throw std::logic_error("attempted to call an unregistered target function");
     if (load.nids_export_locations[nid_hash].first)
         throw std::logic_error("attempted to call a variable");
-    return _handler_call_target_function_impl(load.nids_export_locations[nid_hash].second, this);
+    return _handler_call_target_function_impl(n_params, load.nids_export_locations[nid_hash].second, this);
 }
 
-std::shared_ptr<HandlerContinuation> InterruptContext::handler_call_target_function_impl(std::string name)
+std::shared_ptr<HandlerContinuation> InterruptContext::handler_call_target_function_impl(int n_params, std::string name)
 {
     if (load.libs_export_locations.count(name) == 0)
         throw std::logic_error("attempted to call an unregistered target function");
-    return _handler_call_target_function_impl(load.libs_export_locations[name].second, this);
+    return _handler_call_target_function_impl(n_params, load.libs_export_locations[name].second, this);
 }
 
 void InterruptContext::set_function_call_parameter(int idx, uint32_t value)
@@ -101,7 +117,7 @@ void InterruptContext::set_function_call_parameter(int idx, uint32_t value)
         thread[RegisterAccessProxy::Register::R3]->w(value);
         break;
     default:
-        throw std::out_of_range("helper for calling target function with 4+ arguments is unimplemented");
+        coord.proxy().w(thread[RegisterAccessProxy::Register::SP]->r() - 4 * (idx - 3), value);
     }
 }
 
