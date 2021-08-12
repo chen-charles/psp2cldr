@@ -113,6 +113,7 @@ protected:
     pthread_t m_thread;
     std::atomic<bool> m_stoppable{false};
     std::atomic<bool> m_stop_called{false};
+    std::atomic<bool> m_handling_interrupt{false};
     uint32_t m_until_point_instr_backup{0};
 
     std::atomic<THREAD_EXECUTION_STATE> m_state{THREAD_EXECUTION_STATE::UNSTARTED};
@@ -182,6 +183,7 @@ protected:
 protected:
     struct sigaction m_old_action_ill;
     struct sigaction m_old_action_segv;
+    struct sigaction m_old_action_int;
     stack_t m_old_ss;
     char m_sigstack[SIGSTKSZ] __attribute__((aligned(16)));
 };

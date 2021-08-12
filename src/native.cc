@@ -1,5 +1,6 @@
 #include <cassert>
 #include <sys/mman.h>
+#include <sys/syscall.h> // syscall(SYS_gettid)
 #include <unistd.h>
 
 #include <psp2cldr/logger.hpp>
@@ -8,6 +9,7 @@
 #include <psp2cldr/semaphore.hpp>
 
 pthread_key_t thread_obj_key;
+static bool SIGINT_queued = false;
 
 uint64_t NativeMemoryAccessProxy::copy_in(uint64_t dest, const void *src, size_t num) const
 {
@@ -64,6 +66,13 @@ void _sig_handler(int sig, siginfo_t *info, void *ucontext)
         if (is_stop) // the thread is already dead, ignore the stop request
             return;
 
+        if (sig == SIGINT)
+        {
+            if (!SIGINT_queued)
+                SIGINT_queued = true;
+            return;
+        }
+
         LOG(CRITICAL, "did not find an exec_thread, falling back to default signal action, PC={:#010x}, LR={:#010x}", ctx->uc_mcontext.arm_pc, ctx->uc_mcontext.arm_lr);
         switch (sig)
         {
@@ -87,6 +96,10 @@ void _sig_handler(int sig, siginfo_t *info, void *ucontext)
     if (!exec_thread->m_started)
         return;
 
+    // if (exec_thread->m_handling_interrupt)
+    //     raise(SIGABRT);
+
+    exec_thread->m_handling_interrupt = true;
     exec_thread->m_target_ctx = *ctx;
     exec_thread->m_target_siginfo = *info;
 
@@ -124,6 +137,7 @@ void *thread_bootstrap(ExecutionThread_Native *thread)
     if (sigaltstack(&ss, &thread->m_old_ss) != 0)
         throw std::runtime_error("unrecoverable failure");
 
+    LOG(TRACE, "tid={}, native tid={}", thread->tid(), (uintptr_t)syscall(SYS_gettid));
     if (sigsetjmp(thread->m_return_ctx, 1) == 0)
     {
         if (!thread->m_started)
@@ -136,12 +150,6 @@ void *thread_bootstrap(ExecutionThread_Native *thread)
         }
         throw std::runtime_error("unrecoverable failure");
     }
-    else
-    {
-        goto _execute_signal_callback;
-    }
-
-_execute_signal_callback:
 
     if (thread->m_stop_called)
     {
@@ -152,8 +160,14 @@ _execute_signal_callback:
     if (thread->m_target_ctx.uc_mcontext.arm_pc != thread->m_target_until_point)
     {
         LOG(TRACE, "execute({}): handling interrupt si_signo={:#x}", thread->tid(), thread->m_target_siginfo.si_signo);
-        if (thread->m_target_siginfo.si_signo == SIGILL || thread->m_target_siginfo.si_signo == SIGSEGV)
+        if (thread->m_target_siginfo.si_signo == SIGILL || thread->m_target_siginfo.si_signo == SIGSEGV || thread->m_target_siginfo.si_signo == SIGINT || SIGINT_queued)
         {
+            if (SIGINT_queued)
+            {
+                LOG(CRITICAL, "SIGINT was queued, passing to intr_callback");
+                thread->m_intr_callback(thread->m_coord, *thread, SIGINT);
+                SIGINT_queued = false;
+            }
             thread->m_intr_callback(thread->m_coord, *thread, thread->m_target_siginfo.si_signo);
 
             if (thread->m_stop_called)
@@ -163,14 +177,9 @@ _execute_signal_callback:
             }
             else
             {
-                LOG(TRACE, "execute({}): interrupt handling complete, resuming execution", thread->tid());
+                LOG(TRACE, "execute({}): interrupt handling complete, resuming execution at {:#010x}", thread->tid(), (*thread)[RegisterAccessProxy::Register::PC]->r());
 
-                auto cpsr = (*thread)[RegisterAccessProxy::Register::CPSR];
-                if ((*thread)[RegisterAccessProxy::Register::PC]->r() & 1)
-                    cpsr->w(cpsr->r() | (1 << 5));
-                else
-                    cpsr->w(cpsr->r() & (~(1 << 5)));
-
+                thread->m_handling_interrupt = false;
                 setcontext(&thread->m_target_ctx); // no return, or it failed
 
                 result = ExecutionThread::THREAD_EXECUTION_RESULT::STOP_ERRORED;
@@ -197,6 +206,7 @@ _done:
 
     thread->m_result = result;
     thread->m_state = ExecutionThread::THREAD_EXECUTION_STATE::RESTARTABLE;
+    thread->m_handling_interrupt = false;
     thread->m_started = false;
 
     return NULL;
@@ -394,6 +404,7 @@ void ExecutionThread_Native::panic(int code, LoadContext *load)
 void NativeEngineARM::panic(int code, LoadContext *load)
 {
     PANIC_LOG("Backend: NativeEngineARM");
+    thread_stopall(code);
 
     std::lock_guard guard{m_threads_lock};
     for (auto &p_thread : m_threads)
@@ -460,16 +471,23 @@ NativeEngineARM::NativeEngineARM() : ExecutionCoordinator()
             {
                 if (sigaction(SIGSEGV, &action, &m_old_action_segv) == 0)
                 {
-                    union sigval sig_v;
-                    sig_v.sival_ptr = this;
-                    if (sigqueue(getpid(), SIGILL, sig_v) == 0)
+                    if (sigaction(SIGINT, &action, &m_old_action_int) == 0)
                     {
-                        // setup complete
-                        return;
+                        union sigval sig_v;
+                        sig_v.sival_ptr = this;
+                        if (sigqueue(getpid(), SIGILL, sig_v) == 0)
+                        {
+                            // setup complete
+                            return;
+                        }
+                        else
+                        {
+                            LOG(CRITICAL, "sigqueue failed with error: {}", strerror(errno));
+                        }
                     }
                     else
                     {
-                        LOG(CRITICAL, "sigqueue failed with error: {}", strerror(errno));
+                        LOG(CRITICAL, "sigaction for SIGINT failed with error: {}", strerror(errno));
                     }
                     sigaction(SIGSEGV, &m_old_action_segv, NULL);
                 }
