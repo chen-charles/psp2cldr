@@ -189,25 +189,45 @@ std::pair<std::string, uint32_t> LoadContext::try_resolve_location(uint32_t loca
 #include <signal.h>
 #endif
 
-void InterruptContext::panic(int code)
-{
-    coord.thread_stopall(code);
-    PANIC_LOG("code={:#x}", code);
-    PANIC_LOG("called from thread: {:#x}", thread.tid());
+static std::recursive_mutex GLOBAL_PANIC_LOCK;
 
-    PANIC_LOG("Loaded Modules");
-    for (auto &entry : load.libs_loaded)
+void panic(ExecutionCoordinator *coord, ExecutionThread *thread, LoadContext *load, int code, const char *msg)
+{
+    GLOBAL_PANIC_LOCK.lock();
+
+    coord->thread_stopall(code);
+    PANIC_LOG("code={:#x}", code);
+    if (msg)
     {
-        auto &lib_name = entry.first;
-        auto &load_info = entry.second;
-        PANIC_LOG("{:#010x}-{:#010x} {}", load_info.first, load_info.first + load_info.second, lib_name);
+        PANIC_LOG("msg={}", msg);
     }
 
-    coord.panic(code, &load);
+    if (thread)
+    {
+        PANIC_LOG("called from thread: {:#x}", thread->tid());
+    }
+
+    if (load)
+    {
+        PANIC_LOG("Loaded Modules");
+        for (auto &entry : load->libs_loaded)
+        {
+            auto &lib_name = entry.first;
+            auto &load_info = entry.second;
+            PANIC_LOG("{:#010x}-{:#010x} {}", load_info.first, load_info.first + load_info.second, lib_name);
+        }
+    }
+
+    coord->panic(code, load);
 #ifdef _MSC_VER
     __debugbreak();
 #else
     raise(SIGTRAP);
 #endif
     throw std::runtime_error("panic called");
+}
+
+void InterruptContext::panic(int code, const char *msg)
+{
+    ::panic(&coord, &thread, &load, code, msg);
 }

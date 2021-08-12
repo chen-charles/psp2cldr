@@ -53,7 +53,11 @@ static std::shared_ptr<ExecutionThread> init_main_thread(LoadContext &ctx, Execu
                         LOG(TRACE, "handler({}): {}", thread.tid(), entry.repr());
                         auto handler_result = entry.call(&intr_ctx);
                         LOG(TRACE, "handler({}) exit: {}", thread.tid(), entry.repr());
-                        if (handler_result->result() == 0)
+                        if (const std::exception *handler_excp = handler_result->exception())
+                        {
+                            intr_ctx.panic(0xff, handler_excp->what());
+                        }
+                        else if (handler_result->result() == 0)
                             return;
                         else
                         {

@@ -16,12 +16,27 @@ class HandlerResult
 {
 public:
     HandlerResult(uint32_t result) : m_result(result) {}
+
     virtual ~HandlerResult() {}
 
-    uint32_t result() const { return m_result; }
+    virtual uint32_t result() const { return m_result; }
+    virtual const std::exception *exception() const { return nullptr; }
 
 protected:
     uint32_t m_result;
+};
+
+template <class ExceptionType, typename = typename std::enable_if<std::is_base_of<std::exception, ExceptionType>::value>::type>
+class HandlerException : public HandlerResult
+{
+public:
+    HandlerException(ExceptionType &&exception) : HandlerResult(1), m_excp(std::move(exception)) {}
+    virtual ~HandlerException() {}
+
+    virtual const std::exception *exception() const override { return &m_excp; }
+
+protected:
+    ExceptionType m_excp;
 };
 
 class HandlerContinuation : public HandlerResult, public std::enable_shared_from_this<HandlerContinuation>
@@ -195,6 +210,9 @@ protected:
 
 class ExecutionCoordinator;
 class ExecutionThread;
+
+void panic(ExecutionCoordinator *coord, ExecutionThread *thread = nullptr, LoadContext *load = nullptr, int code = 0, const char *msg = nullptr);
+
 class InterruptContext
 {
 public:
@@ -221,7 +239,7 @@ public:
 public:
     virtual std::shared_ptr<HandlerResult> install_forward_handler(std::string target);
     virtual std::string read_str(uint32_t p_cstr) const;
-    virtual void panic(int code = 0);
+    virtual void panic(int code = 0, const char *msg = nullptr);
 
 protected:
     virtual std::shared_ptr<HandlerContinuation> handler_call_target_function_impl(int n_params, NIDHASH_t nid_hash);

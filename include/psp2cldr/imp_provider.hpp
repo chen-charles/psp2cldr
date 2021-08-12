@@ -43,6 +43,8 @@ static inline void _target_return_impl(InterruptContext *ctx, uint32_t val)
 
 #define TARGET_RETURN(val) _target_return_impl(ctx, val)
 #define HANDLER_RETURN(val) return std::make_shared<HandlerResult>(val)
+#define HANDLER_EXCEPTION(excp) return std::make_shared<HandlerException<decltype(excp)>>(excp)
+#define HANDLER_RUNTIME_EXCEPTION(what) HANDLER_EXCEPTION(std::runtime_error(what))
 
 #define _FORWARD_PASTE(a) a
 #define DECLARE_VITA_IMP_TYPE(type) \
