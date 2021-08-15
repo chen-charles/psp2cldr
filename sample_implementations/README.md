@@ -3,7 +3,7 @@ Getting Started on Provider Implementations
 ## Basics
 
 ### Includes
-There is a single include you will need in order to access the `psp2cldr` provided interface.  
+There is a single include you will need in order to access the `psp2cldr` provided required interface.  
 ```cpp
 #include <psp2cldr/imp_provider.hpp>
 ```
@@ -35,6 +35,7 @@ DEFINE_VITA_IMP_NID_EXPORT(88758561, 391B74B8)  // parameter (InterruptContext *
     DECLARE_VITA_IMP_TYPE(FUNCTION); // required, see "Notes on Variables"
     // your implementation here
     return std::make_shared<HandlerResult>(0);
+    // or HANDLER_RETURN(0);
 }
 ```
 
@@ -45,7 +46,9 @@ DEFINE_VITA_IMP_SYM_EXPORT(_fstat)  // parameter (InterruptContext *ctx)
 {
     DECLARE_VITA_IMP_TYPE(FUNCTION); // required, see "Notes on Variables"
     // your implementation here
-    return std::make_shared<HandlerResult>(0);
+    return std::make_shared<HandlerException<std::runtime_error>>(std::runtime_error("panic"));
+    // or HANDLER_RUNTIME_EXCEPTION("panic");
+    // or HANDLER_EXCEPTION(std::runtime_error("panic"));
 }
 ```
 
