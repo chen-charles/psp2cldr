@@ -97,7 +97,7 @@ public:
         return handle;
     }
 
-    virtual OSL_HANDLE alloc()
+    virtual OSL_HANDLE alloc() override
     {
         std::lock_guard guard{m_lock};
         auto handle = HandleAllocator::alloc();
@@ -105,10 +105,11 @@ public:
         return handle;
     }
 
-    virtual void free(OSL_HANDLE key)
+    virtual void free(OSL_HANDLE key) override
     {
         std::lock_guard guard{m_lock};
         m_storage.erase(key);
+        HandleAllocator::free(key);
     }
 
 public:
