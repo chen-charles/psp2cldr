@@ -5,19 +5,19 @@ Loading *userspace* PSP2 VELFs.
 
 ## Native
 **psp2cldr** runs directly on arm32v7-linux  
+### via QEMU System Emulation
+`virt` platform with `smp=4` and `4G` memory  
+   * `ubuntu:bionic` now has `cmake` from [Kitware APT Repository](https://apt.kitware.com/) too.  
+   * `ubuntu:focal` upgraded from `bionic` `netboot` installation on `virt` platform with `smp=4` and `4G` memory.  
+      * make sure `/boot` has `1G`, otherwise the upgrade would fail.  
 
 ### via Docker
 `glibc` is required.  
+Noticed a memory leak, but it doesn't reproduce on full system emulation. Verified with `heaptrack`/`jemalloc` and `psp2cldr`'s `mmap` calls, seems it isn't caused by `psp2cldr`. Would be a good verification platform to work with, but be aware of this potential leakage.  
 #### `arm32v7/fedora:33`  
    * Recommended, comes with a working CMake, GCC 10.  
 #### `arm32v7/ubuntu:focal`
-   * CMake 3.16 has a [bug](https://gitlab.kitware.com/cmake/cmake/-/issues/20568) that renders it unusable on armhf natively, you can either cross-compile ([GNU Toolchain for the A-profile Architecture](https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain/gnu-a/downloads)), or build CMake 3.18+ from source.  
-
-### via QEMU-user
-```bash
-sudo apt install qemu-user qemu-user-static gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf binutils-arm-linux-gnueabihf gdb-multiarch
-qemu-arm -L /usr/arm-linux-gnueabihf/ ./build/psp2cldr
-```
+   * CMake 3.16 has a [bug](https://gitlab.kitware.com/cmake/cmake/-/issues/20568) that renders it unusable on armhf, you can either cross-compile ([GNU Toolchain for the A-profile Architecture](https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain/gnu-a/downloads)), build CMake 3.18+ from source, or use the [Kitware APT Repository](https://apt.kitware.com/) (*had no luck though).  
 
 ## Usage
    1. Displaying information of the supplied VELF  
