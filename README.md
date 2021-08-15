@@ -25,14 +25,20 @@ Noticed a memory leak, but it doesn't reproduce on full system emulation. Verifi
    2. Load VELF (see usage via `psp2cldr -h`)  
 
 ## Supplementary ELFs
-**psp2cldr** provides a mechanism to load supplementary ELFs into the address space of the target.  
-Supplementary ELFs need to be built for the target platform, with the following options: `-fPIC`, `-shared`, `-nostdlib`, `-lgcc` and `--hash-style=sysv`.  
+**psp2cldr** provides a mechanism to load supplementary ELFs into the address space of the target. `DT_NEEDED` tag is respected.  
+Supplementary ELFs need to be built for the target platform. [A custom toolchain](https://github.com/chen-charles/buildscripts) has been assembled to permit `C`(`newlib` + `pthread-embedded`) and `C++` library usages.  
 ```bash
-arm-vita-eabi-gcc -shared -o libyours.so -Wl,--hash-style=sysv,--whole-archive libyours.a -nostdlib -lgcc
+arm-vita-eabi-g++ -shared a.cc -o supp_elf.so
 ```
-Newlib has been compiled [here](https://github.com/chen-charles/psp2cldr-newlib/releases) (all syscalls should be provided from the providers). `thread_basic*` can be tested with the sample dynamic implementation.  
-Note: `DT_NEEDED` tag is respected.  
-
+The following libraries need to be loaded from the toolchain,
+```
+libc.so
+libm.so
+libpthread.so
+libgcc_s.so
+libstdc++.so
+```
+   
 ## Known Limitations
    * Only `e_type == ET_SCE_RELEXEC` is supported, partly because in native mode we cannot enforce the binary to be loaded at an exact location.  
    * Only relocation type `0` and `1` is implemented. Games tend to not use types `2` to `9`.  
