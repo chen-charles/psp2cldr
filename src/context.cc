@@ -24,7 +24,7 @@ static std::mutex continuation_mutex;
 static std::shared_ptr<HandlerContinuation> _handler_call_target_function_impl(int n_params, uint32_t target_func_ptr, InterruptContext *ctx)
 {
     sym_stub stub;
-    volatile uint32_t stub_loc;
+    uint32_t stub_loc;
     std::shared_ptr<HandlerContinuation> out;
     {
         std::lock_guard<std::mutex> guard(continuation_mutex);
@@ -72,13 +72,10 @@ static std::shared_ptr<HandlerContinuation> _handler_call_target_function_impl(i
         if (handler_stub_top <= handler_stub_loc)
             throw std::runtime_error("FIXME: handler_stub has limited capacity");
     }
-    // since we released continuation_mutex, another thread might be accessing all the static variables
-    // we need a volatile stub_loc locally to make sure we are storing the correct stub location
 
-    uint32_t stub_loc_dq = stub_loc;
     {
         std::unique_lock guard(ctx->load.unimplemented_targets_mutex);
-        ctx->load.unimplemented_targets[stub_loc_dq] = stub;
+        ctx->load.unimplemented_targets[stub_loc] = stub;
     }
     return out;
 }
