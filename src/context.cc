@@ -19,6 +19,7 @@ static void adjust_stack_for_parameters(InterruptContext *ctx, int n_params, boo
     }
 }
 
+static std::once_flag continuation_initialization_flag;
 static std::mutex continuation_mutex;
 static std::shared_ptr<HandlerContinuation> _handler_call_target_function_impl(int n_params, uint32_t target_func_ptr, InterruptContext *ctx)
 {
@@ -30,17 +31,15 @@ static std::shared_ptr<HandlerContinuation> _handler_call_target_function_impl(i
 
         static const uint32_t INSTR_UDF0_ARM = 0xe7f000f0;
 
-        static bool is_init = false;
         static uint32_t handler_stub_loc;
         static uint32_t handler_stub_top;
+        static const size_t CONT_STUB_SIZE = 0x100000;
 
-        if (!is_init)
-        {
-            static const size_t CONT_STUB_SIZE = 0x100000;
-            handler_stub_loc = ctx->coord.mmap(0, CONT_STUB_SIZE);
-            handler_stub_top = handler_stub_loc + CONT_STUB_SIZE;
-            is_init = true;
-        }
+        std::call_once(continuation_initialization_flag, [&]()
+                       {
+                           handler_stub_loc = ctx->coord.mmap(0, CONT_STUB_SIZE);
+                           handler_stub_top = handler_stub_loc + CONT_STUB_SIZE;
+                       });
 
         ctx->coord.proxy().copy_in(handler_stub_loc, &INSTR_UDF0_ARM, sizeof(INSTR_UDF0_ARM));
 
