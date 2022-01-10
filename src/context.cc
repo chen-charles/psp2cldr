@@ -227,3 +227,8 @@ void InterruptContext::panic(int code, const char *msg)
 {
     ::panic(&coord, &thread, &load, code, msg);
 }
+
+void ExecutionCoordinator::panic(ExecutionThread *thread, LoadContext *load, int code, const char *msg)
+{
+    ::panic(this, thread, load, code, msg);
+}

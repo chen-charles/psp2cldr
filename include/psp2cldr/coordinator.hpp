@@ -171,6 +171,7 @@ public:
     virtual void thread_stopall(int retval = 0) = 0;
 
     virtual void panic(int code = 0, LoadContext *load = nullptr) = 0;
+    virtual void panic(ExecutionThread *thread = nullptr, LoadContext *load = nullptr, int code = 0, const char *msg = nullptr); // forward to panic impl.
 
     // default interrupt callback for all newly created threads
     virtual void register_interrupt_callback(std::function<void(ExecutionCoordinator &, ExecutionThread &, uint32_t)> callback) = 0;
