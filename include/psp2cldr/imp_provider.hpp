@@ -1,6 +1,8 @@
 #ifndef PSP2CLDR_IMP_PROVIDER_INCL_H
 #define PSP2CLDR_IMP_PROVIDER_INCL_H
 
+#pragma warning( disable : 4190 )
+
 #include <psp2cldr/access_proxy.hpp>
 #include <psp2cldr/arch.h>
 #include <psp2cldr/context.hpp>
