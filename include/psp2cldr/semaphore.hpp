@@ -96,6 +96,39 @@ public:
         return false;
     }
 
+    template <class Rep, class Period, class LockGuardClass>
+    bool cancellable_acquire_for(std::chrono::duration<Rep, Period> dur, LockGuardClass &guard, const canceler &canc = {})
+    {
+        std::unique_lock lk{m_lock};
+
+        guard.unlock();
+
+        canceler::scoped_canceler scoped(canc, this);
+
+        if (canc.is_cancelled())
+        {
+            return false;
+        }
+
+        if (m_cv.wait_for(lk, dur, [&]()
+                          {
+                              if (canc.is_cancelled())
+                              {
+                                  return true;
+                              }
+                              return m_ct != 0; }))
+        {
+            if (canc.is_cancelled())
+            {
+                return false;
+            }
+
+            m_ct--;
+            return true;
+        }
+        return false;
+    }
+
     bool try_acquire()
     {
         std::unique_lock lk{m_lock};
