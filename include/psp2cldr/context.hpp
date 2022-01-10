@@ -211,7 +211,7 @@ protected:
 class ExecutionCoordinator;
 class ExecutionThread;
 
-void panic(ExecutionCoordinator *coord, ExecutionThread *thread = nullptr, LoadContext *load = nullptr, int code = 0, const char *msg = nullptr);
+extern void panic(ExecutionCoordinator *coord, ExecutionThread *thread = nullptr, LoadContext *load = nullptr, int code = 0, const char *msg = nullptr);
 
 class InterruptContext
 {
