@@ -19,64 +19,66 @@ static void adjust_stack_for_parameters(InterruptContext *ctx, int n_params, boo
     }
 }
 
-static std::once_flag continuation_initialization_flag;
-static std::mutex continuation_mutex;
+static uint32_t allocate_stub_location(InterruptContext *ctx)
+{
+    static std::once_flag initialization_flag;
+
+    static std::atomic<uint32_t> handler_stub_loc;
+    static uint32_t handler_stub_top;
+    static const size_t CONT_STUB_SIZE = 0x100000;
+
+    // @TODO: put this onto coordinator using a tag
+    std::call_once(initialization_flag, [&]()
+                    {
+                        handler_stub_loc = ctx->coord.mmap(0, CONT_STUB_SIZE);
+                        handler_stub_top = handler_stub_loc + CONT_STUB_SIZE;
+                    });
+
+    const uint32_t allocated = handler_stub_loc.fetch_add(0x8);
+    if (handler_stub_top <= allocated + 0x8)
+        throw std::runtime_error("FIXME: handler_stub has limited capacity");
+    return allocated;
+}
+
+static void install_stub(LoadContext& ctx, uint32_t stub_loc, const sym_stub& stub)
+{
+    std::unique_lock guard(ctx.unimplemented_targets_mutex);
+    ctx.unimplemented_targets[stub_loc] = stub;
+}
+
 static std::shared_ptr<HandlerContinuation> _handler_call_target_function_impl(int n_params, uint32_t target_func_ptr, InterruptContext *ctx)
 {
+    static const uint32_t INSTR_UDF0_ARM = 0xe7f000f0;
+
+    uint32_t stub_loc = allocate_stub_location(ctx);
+    ctx->coord.proxy().copy_in(stub_loc, &INSTR_UDF0_ARM, sizeof(INSTR_UDF0_ARM));
+
+    std::shared_ptr<HandlerContinuation> out = std::make_shared<HandlerContinuation>(0);
+
     sym_stub stub;
-    uint32_t stub_loc;
-    std::shared_ptr<HandlerContinuation> out;
+    stub.name = "__psp2cldr__handler_continuation_to_" + u32_str_repr(target_func_ptr);
+    uint32_t original_lr = ctx->thread[RegisterAccessProxy::Register::LR]->r();
+
+    uint32_t original_sp = ctx->thread[RegisterAccessProxy::Register::SP]->r();
+    adjust_stack_for_parameters(ctx, n_params);
+
+    stub.func = [original_lr, original_sp, out, n_params](std::string name, Elf32_Sym sym, InterruptContext *p_ctx)
     {
-        std::lock_guard<std::mutex> guard(continuation_mutex);
+        auto r0 = p_ctx->thread[RegisterAccessProxy::Register::R0]->r();
+        p_ctx->thread[RegisterAccessProxy::Register::LR]->w(original_lr);
 
-        static const uint32_t INSTR_UDF0_ARM = 0xe7f000f0;
+        adjust_stack_for_parameters(p_ctx, n_params, true);
 
-        static uint32_t handler_stub_loc;
-        static uint32_t handler_stub_top;
-        static const size_t CONT_STUB_SIZE = 0x100000;
+        if (original_sp != p_ctx->thread[RegisterAccessProxy::Register::SP]->r())
+            throw std::runtime_error("stack corruption detected");
 
-        std::call_once(continuation_initialization_flag, [&]()
-                       {
-                           handler_stub_loc = ctx->coord.mmap(0, CONT_STUB_SIZE);
-                           handler_stub_top = handler_stub_loc + CONT_STUB_SIZE;
-                       });
+        return out->continue_(r0, p_ctx);
+    };
 
-        ctx->coord.proxy().copy_in(handler_stub_loc, &INSTR_UDF0_ARM, sizeof(INSTR_UDF0_ARM));
-
-        out = std::make_shared<HandlerContinuation>(0, handler_stub_loc);
-
-        stub.name = "__psp2cldr__handler_continuation_to_" + u32_str_repr(target_func_ptr);
-        uint32_t original_lr = ctx->thread[RegisterAccessProxy::Register::LR]->r();
-
-        uint32_t original_sp = ctx->thread[RegisterAccessProxy::Register::SP]->r();
-        adjust_stack_for_parameters(ctx, n_params);
-
-        stub.func = [original_lr, original_sp, out, n_params](std::string name, Elf32_Sym sym, InterruptContext *p_ctx)
-        {
-            auto r0 = p_ctx->thread[RegisterAccessProxy::Register::R0]->r();
-            p_ctx->thread[RegisterAccessProxy::Register::LR]->w(original_lr);
-
-            adjust_stack_for_parameters(p_ctx, n_params, true);
-
-            if (original_sp != p_ctx->thread[RegisterAccessProxy::Register::SP]->r())
-                throw std::runtime_error("stack corruption detected");
-
-            return out->continue_(r0, p_ctx);
-        };
-
-        ctx->thread[RegisterAccessProxy::Register::PC]->w(target_func_ptr);
-        ctx->thread[RegisterAccessProxy::Register::LR]->w(handler_stub_loc);
-
-        stub_loc = handler_stub_loc;
-        handler_stub_loc += 0x8;
-        if (handler_stub_top <= handler_stub_loc)
-            throw std::runtime_error("FIXME: handler_stub has limited capacity");
-    }
-
-    {
-        std::unique_lock guard(ctx->load.unimplemented_targets_mutex);
-        ctx->load.unimplemented_targets[stub_loc] = stub;
-    }
+    ctx->thread[RegisterAccessProxy::Register::PC]->w(target_func_ptr);
+    ctx->thread[RegisterAccessProxy::Register::LR]->w(stub_loc);
+    
+    install_stub(ctx->load, stub_loc, stub);
     return out;
 }
 

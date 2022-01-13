@@ -42,7 +42,7 @@ protected:
 class HandlerContinuation : public HandlerResult, public std::enable_shared_from_this<HandlerContinuation>
 {
 public:
-    HandlerContinuation(uint32_t result, uint32_t fault_addr) : HandlerResult(result), fault_addr(fault_addr) {}
+    HandlerContinuation(uint32_t result) : HandlerResult(result) {}
     virtual ~HandlerContinuation() {}
 
     virtual std::shared_ptr<HandlerContinuation> then(std::function<std::shared_ptr<HandlerResult>(uint32_t, InterruptContext *)> cont, std::function<void(int err)> fail = {})
@@ -82,7 +82,6 @@ public:
     }
 
 private:
-    uint32_t fault_addr;
     std::function<std::shared_ptr<HandlerResult>(uint32_t, InterruptContext *)> m_cont{_default_cont};
     std::function<void(int err)> m_fail;
     bool is_cont_set = false;
@@ -123,8 +122,8 @@ class import_stub_entry
 {
 public:
     import_stub_entry() { type = 0; }
-    import_stub_entry(nid_stub &stub) : nid(stub) { type = 1; }
-    import_stub_entry(sym_stub &stub) : sym(stub) { type = 2; }
+    import_stub_entry(const nid_stub &stub) : nid(stub) { type = 1; }
+    import_stub_entry(const sym_stub &stub) : sym(stub) { type = 2; }
 
     std::shared_ptr<HandlerResult> call(InterruptContext *ctx)
     {
