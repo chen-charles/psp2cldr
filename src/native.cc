@@ -124,8 +124,19 @@ ExecutionThread_Native::ExecutionThread_Native(ExecutionCoordinator &coord) : m_
         throw std::runtime_error("getcontext failed");
 }
 
-void *thread_bootstrap(ExecutionThread_Native *thread)
+struct thread_bootstrap_args
 {
+    ExecutionThread_Native *thread;
+
+    semaphore barrier;
+
+    ExecutionThread::THREAD_EXECUTION_RESULT start_result;
+};
+
+void *thread_bootstrap(thread_bootstrap_args *args)
+{
+    ExecutionThread_Native *thread = args->thread;
+
     pthread_setspecific(thread_obj_key, thread);
 
     ExecutionThread::THREAD_EXECUTION_RESULT result = ExecutionThread::THREAD_EXECUTION_RESULT::START_FAILED;
@@ -135,7 +146,7 @@ void *thread_bootstrap(ExecutionThread_Native *thread)
     ss.ss_flags = 0;
     ss.ss_sp = (void *)thread->m_sigstack;
     if (sigaltstack(&ss, &thread->m_old_ss) != 0)
-        throw std::runtime_error("unrecoverable failure");
+        throw std::runtime_error("unrecoverable failure: sigaltstack");
 
     LOG(TRACE, "tid={}, native tid={}", thread->tid(), (uintptr_t)syscall(SYS_gettid));
     if (sigsetjmp(thread->m_return_ctx, 1) == 0)
@@ -144,12 +155,19 @@ void *thread_bootstrap(ExecutionThread_Native *thread)
         {
             LOG(TRACE, "execute({}): ready to start", thread->tid());
             thread->m_started = true;
+            args->start_result = ExecutionThread::THREAD_EXECUTION_RESULT::OK;
+            args->barrier.release();
+            args = nullptr;
 
             setcontext(&thread->m_target_ctx); // no return, or it failed
             LOG(CRITICAL, "setcontext failed with error: {}", strerror(errno));
         }
-        throw std::runtime_error("unrecoverable failure");
+
+        // TODO: this might be recoverable, any use-cases?
+        throw std::runtime_error("unrecoverable failure: sigsetjmp/setcontext");
     }
+
+    // args could be allocated on stack, and therefore should not be accessed anymore
 
     if (thread->m_stop_called)
     {
@@ -249,12 +267,15 @@ ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Native::start(uint32_t 
 
     m_target_until_point = until;
 
+    thread_bootstrap_args args;
+    args.thread = this;
+    args.start_result = THREAD_EXECUTION_RESULT::START_FAILED;
     {
         std::lock_guard guard{m_thread_lock};
 
         m_state = THREAD_EXECUTION_STATE::RUNNING;
 
-        if (pthread_create(&m_thread, NULL, (void *(*)(void *))thread_bootstrap, this) != 0)
+        if (pthread_create(&m_thread, NULL, (void *(*)(void *))thread_bootstrap, &args) != 0)
         {
             _execute_recover_until_point(until, m_until_point_instr_backup, m_coord.proxy());
             throw std::runtime_error("pthread_create failed");
@@ -263,7 +284,8 @@ ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Native::start(uint32_t 
         m_thread_is_valid = true;
     }
 
-    return THREAD_EXECUTION_RESULT::OK;
+    args.barrier.acquire();
+    return args.start_result;
 }
 
 ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Native::join(uint32_t *retval)

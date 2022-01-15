@@ -68,7 +68,7 @@ protected:
 class InterruptContext;
 class NativeEngineARM;
 void _sig_handler(int sig, siginfo_t *info, void *ucontext);
-void *thread_bootstrap(ExecutionThread_Native *thread);
+void *thread_bootstrap(struct thread_bootstrap_args *args);
 class ExecutionThread_Native : public ExecutionThread
 {
 public:
@@ -134,7 +134,7 @@ protected:
     friend class NativeMemoryAccessProxy;
     friend class RegisterAccessProxy_Native;
     friend void _sig_handler(int sig, siginfo_t *info, void *ucontext);
-    friend void *thread_bootstrap(ExecutionThread_Native *thread);
+    friend void *thread_bootstrap(struct thread_bootstrap_args *args);
 };
 static_assert(std::atomic<bool>::is_always_lock_free);
 static_assert(std::atomic<uint32_t>::is_always_lock_free);
@@ -174,7 +174,7 @@ protected:
 protected:
     std::function<void(ExecutionCoordinator &, ExecutionThread &, uint32_t)> m_intr_callback = {};
     friend void _sig_handler(int sig, siginfo_t *info, void *ucontext);
-    friend void *thread_bootstrap(ExecutionThread_Native *thread);
+    friend void *thread_bootstrap(struct thread_bootstrap_args *args);
 
 protected:
     std::mutex m_threads_lock;
