@@ -1,10 +1,17 @@
+/*
+ * Copyright (C) 2021-2022 Jianye Chen
+ *
+ * This software may be modified and distributed under the terms
+ * of the MIT license.  See the LICENSE file for details.
+ */
+
 #ifndef ARM_ELFLOADER_H
 #define ARM_ELFLOADER_H
 
 #include <elf.h>
 
 /**
- * "ARM ELF" (https://developer.arm.com/documentation/espc0003/1-0).  
+ * "ARM ELF" (https://developer.arm.com/documentation/espc0003/1-0).
  * "ELF for the Arm ® Architecture" (https://developer.arm.com/documentation/ihi0044/h).
  */
 
@@ -21,8 +28,10 @@
 // Target Platform: sizeof(uintptr_t) == sizeof(uint32_t)
 class ELFLoader_Base
 {
-public:
-    ELFLoader_Base(const std::string &filename) : ELFLoader_Base(std::ifstream(filename, std::ios::binary)) {}
+  public:
+    ELFLoader_Base(const std::string &filename) : ELFLoader_Base(std::ifstream(filename, std::ios::binary))
+    {
+    }
 
     ELFLoader_Base(std::ifstream &&stream) : ifs(std::move(stream))
     {
@@ -32,7 +41,8 @@ public:
         ifs.seekg(0, std::ios::beg);
         ifs.read((char *)&ehdr, sizeof(Elf32_Ehdr));
 
-        if (std::memcmp(ehdr.e_ident, ELFMAG, SELFMAG) != 0 || ehdr.e_ident[EI_CLASS] != ELFCLASS32 || ehdr.e_ident[EI_DATA] != ELFDATA2LSB || ehdr.e_ident[EI_VERSION] != EV_CURRENT || ehdr.e_machine != EM_ARM)
+        if (std::memcmp(ehdr.e_ident, ELFMAG, SELFMAG) != 0 || ehdr.e_ident[EI_CLASS] != ELFCLASS32 ||
+            ehdr.e_ident[EI_DATA] != ELFDATA2LSB || ehdr.e_ident[EI_VERSION] != EV_CURRENT || ehdr.e_machine != EM_ARM)
             throw std::invalid_argument("the input stream is not a valid ARM32 LSB ELF target (ehdr)");
 
         if (ehdr.e_shoff)
@@ -66,11 +76,15 @@ public:
     }
 
     // @returns <image load base, image load size>
-    virtual std::pair<uint32_t, uint32_t> load_and_relocate(std::function<uint32_t(uint32_t, size_t)> mmap_func, const MemoryAccessProxy &target) const = 0;
+    virtual std::pair<uint32_t, uint32_t> load_and_relocate(std::function<uint32_t(uint32_t, size_t)> mmap_func,
+                                                            const MemoryAccessProxy &target) const = 0;
 
-    virtual const char *name() const { return NULL; }
+    virtual const char *name() const
+    {
+        return NULL;
+    }
 
-public:
+  public:
     uintptr_t la2va(uintptr_t la, uintptr_t load_base) const
     {
         return la - load_base + find_va_base();
@@ -197,11 +211,17 @@ public:
         return {max_vaddr - min_vaddr, max_sz};
     }
 
-protected:
-    static inline uint32_t align_down(uint32_t value, uint32_t alignment) { return value - value % alignment; }
-    static inline uint32_t align_up(uint32_t value, uint32_t alignment) { return (value + alignment - 1) - (value + alignment - 1) % alignment; }
+  protected:
+    static inline uint32_t align_down(uint32_t value, uint32_t alignment)
+    {
+        return value - value % alignment;
+    }
+    static inline uint32_t align_up(uint32_t value, uint32_t alignment)
+    {
+        return (value + alignment - 1) - (value + alignment - 1) % alignment;
+    }
 
-protected:
+  protected:
     mutable std::ifstream ifs;
     Elf32_Ehdr ehdr;
     std::vector<Elf32_Phdr> phdrs;
@@ -212,8 +232,10 @@ protected:
 
 class ELF : public ELFLoader_Base
 {
-public:
-    ELF(const std::string &filename) : ELF(std::ifstream(filename, std::ios::binary)) {}
+  public:
+    ELF(const std::string &filename) : ELF(std::ifstream(filename, std::ios::binary))
+    {
+    }
 
     ELF(std::ifstream &&stream) : ELFLoader_Base(std::move(stream))
     {
@@ -434,7 +456,8 @@ public:
         }
     }
 
-    virtual std::pair<uint32_t, uint32_t> load_and_relocate(std::function<uint32_t(uint32_t, size_t)> mmap_func, const MemoryAccessProxy &target) const
+    virtual std::pair<uint32_t, uint32_t> load_and_relocate(std::function<uint32_t(uint32_t, size_t)> mmap_func,
+                                                            const MemoryAccessProxy &target) const
     {
         assert(ifs);
 
@@ -468,7 +491,8 @@ public:
             uint32_t B_S = find_va_seg_loadbase(rel.r_offset, load_base);
 
             // implicit handle of STN_UNDEF==0
-            apply_relocation(target, ELF32_R_TYPE(rel.r_info), P, symbols[ELF32_R_SYM(rel.r_info)], 0, B_S, false, load_base);
+            apply_relocation(target, ELF32_R_TYPE(rel.r_info), P, symbols[ELF32_R_SYM(rel.r_info)], 0, B_S, false,
+                             load_base);
         }
 
         for (auto &rela : rela_s)
@@ -477,13 +501,15 @@ public:
             uint32_t B_S = find_va_seg_loadbase(rela.r_offset, load_base);
 
             // implicit handle of STN_UNDEF==0
-            apply_relocation(target, ELF32_R_TYPE(rela.r_info), P, symbols[ELF32_R_SYM(rela.r_info)], rela.r_addend, B_S, true, load_base);
+            apply_relocation(target, ELF32_R_TYPE(rela.r_info), P, symbols[ELF32_R_SYM(rela.r_info)], rela.r_addend,
+                             B_S, true, load_base);
         }
 
         return {load_base, memory_req.first};
     }
 
-    std::vector<uintptr_t> get_init_routines(const MemoryAccessProxy &target, uintptr_t load_base) const // returning LAs
+    std::vector<uintptr_t> get_init_routines(const MemoryAccessProxy &target,
+                                             uintptr_t load_base) const // returning LAs
     {
         std::vector<uintptr_t> init_routines;
 
@@ -491,7 +517,8 @@ public:
         {
             for (auto i = 0; i < INIT_FINI_data.preinit_arr_sz / sizeof(uint32_t); i++)
             {
-                init_routines.push_back(target.r<uint32_t>(va2la(INIT_FINI_data.preinit_arr, load_base) + i * sizeof(uint32_t)));
+                init_routines.push_back(
+                    target.r<uint32_t>(va2la(INIT_FINI_data.preinit_arr, load_base) + i * sizeof(uint32_t)));
                 init_routines.back() = va2la(init_routines.back(), load_base);
             }
         }
@@ -503,14 +530,16 @@ public:
         {
             for (auto i = 0; i < INIT_FINI_data.init_arr_sz / sizeof(uint32_t); i++)
             {
-                init_routines.push_back(target.r<uint32_t>(va2la(INIT_FINI_data.init_arr, load_base) + i * sizeof(uint32_t)));
+                init_routines.push_back(
+                    target.r<uint32_t>(va2la(INIT_FINI_data.init_arr, load_base) + i * sizeof(uint32_t)));
             }
         }
 
         return init_routines;
     }
 
-    std::vector<uintptr_t> get_term_routines(const MemoryAccessProxy &target, uintptr_t load_base) const // returning LAs
+    std::vector<uintptr_t> get_term_routines(const MemoryAccessProxy &target,
+                                             uintptr_t load_base) const // returning LAs
     {
         std::vector<uintptr_t> term_routines;
 
@@ -518,7 +547,8 @@ public:
         {
             for (auto i = 0; i < INIT_FINI_data.fini_arr_sz / sizeof(uint32_t); i++)
             {
-                term_routines.push_back(target.r<uint32_t>(va2la(INIT_FINI_data.fini_arr, load_base) + i * sizeof(uint32_t)));
+                term_routines.push_back(
+                    target.r<uint32_t>(va2la(INIT_FINI_data.fini_arr, load_base) + i * sizeof(uint32_t)));
                 term_routines.back() = va2la(term_routines.back(), load_base);
             }
         }
@@ -586,9 +616,9 @@ public:
             case SHN_ABS:
                 [[fallthrough]];
             default:
-                if (
-                    (ELF32_ST_BIND(Sym.st_info) == STB_GLOBAL || ELF32_ST_BIND(Sym.st_info) == STB_WEAK) &&
-                    (ELF32_ST_VISIBILITY(Sym.st_other) == STV_DEFAULT || ELF32_ST_VISIBILITY(Sym.st_other) == STV_PROTECTED))
+                if ((ELF32_ST_BIND(Sym.st_info) == STB_GLOBAL || ELF32_ST_BIND(Sym.st_info) == STB_WEAK) &&
+                    (ELF32_ST_VISIBILITY(Sym.st_other) == STV_DEFAULT ||
+                     ELF32_ST_VISIBILITY(Sym.st_other) == STV_PROTECTED))
                     out.push_back(std::make_pair(Sym, Sym.st_value));
                 break;
             }
@@ -596,15 +626,15 @@ public:
         return out;
     }
 
-    bool find_exidx(uint32_t *va, uint32_t *memsz) const // __gnu_Unwind_Find_exidx, pcount should be derived from sizeof(__EIT_entry)
+    bool find_exidx(uint32_t *va,
+                    uint32_t *memsz) const // __gnu_Unwind_Find_exidx, pcount should be derived from sizeof(__EIT_entry)
     {
         for (uint32_t i = 0; i < phdrs.size(); i++)
         {
             auto &phdr = phdrs[i];
             switch (phdr.p_type)
             {
-            case PT_ARM_EXIDX:
-            {
+            case PT_ARM_EXIDX: {
                 *va = phdr.p_vaddr;
                 *memsz = phdr.p_memsz;
                 return true;
@@ -616,7 +646,7 @@ public:
         return false;
     }
 
-public:
+  public:
     virtual const char *name() const
     {
         if (p_soname_off == -1)
@@ -624,7 +654,7 @@ public:
         return getstr(p_soname_off);
     }
 
-protected:
+  protected:
     std::vector<Elf32_Sym> symbols;
 
     std::vector<Elf32_Rela> rela_s;
@@ -650,8 +680,9 @@ protected:
 
     Elf32_Word p_soname_off = -1;
 
-protected:
-    virtual void apply_relocation(const MemoryAccessProxy &target, uint32_t code, uint32_t P, const Elf32_Sym &Sym, uint32_t A, uint32_t B_S, bool is_RelA, uintptr_t load_base) const
+  protected:
+    virtual void apply_relocation(const MemoryAccessProxy &target, uint32_t code, uint32_t P, const Elf32_Sym &Sym,
+                                  uint32_t A, uint32_t B_S, bool is_RelA, uintptr_t load_base) const
     {
         uint32_t Pa = P & 0xFFFFFFFC;
         uint32_t S = 0;
@@ -670,7 +701,8 @@ protected:
                 S = va2la(Sym.st_value, load_base);
             }
 
-        // "T is 1 if the target symbol S has type STT_FUNC and the symbol addresses a Thumb instruction; it is 0 otherwise."
+        // "T is 1 if the target symbol S has type STT_FUNC and the symbol addresses a Thumb instruction; it is 0
+        // otherwise."
         uint32_t T = 0;
         if (ELF32_ST_TYPE(Sym.st_info) == STT_FUNC && S % 2 == 1)
             T = 1;

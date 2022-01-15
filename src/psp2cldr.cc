@@ -1,3 +1,10 @@
+/*
+ * Copyright (C) 2021-2022 Jianye Chen
+ *
+ * This software may be modified and distributed under the terms
+ * of the MIT license.  See the LICENSE file for details.
+ */
+
 #include <memory>
 #if defined(_MSC_VER) || (__GNUC__ >= 8)
 #include <filesystem>
@@ -25,8 +32,7 @@ int main(int argc, char *argv[])
 
     if (argc <= 1 || strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0)
     {
-        const char usage_str[]{
-            "\
+        const char usage_str[]{"\
 usage: psp2cldr --readelf <filename> \n\
 usage: psp2cldr <options> <filename> ...<nid_implementation_libraries> \n\
 \n\
@@ -71,7 +77,8 @@ order of supplying <nid_implementation_libraries> matters, the first observance 
                 break;
             case 1: // short, 8 bytes
                 code = reloc.r_short_entry.r_code;
-                P = velf.find_seg_vabase(reloc.r_short_entry.r_datseg) + (reloc.r_short_entry.r_offset_hi << 12) + reloc.r_short_entry.r_offset_lo;
+                P = velf.find_seg_vabase(reloc.r_short_entry.r_datseg) + (reloc.r_short_entry.r_offset_hi << 12) +
+                    reloc.r_short_entry.r_offset_lo;
                 break;
             default:
                 throw std::out_of_range("relocation type is not implemented");
@@ -114,7 +121,8 @@ order of supplying <nid_implementation_libraries> matters, the first observance 
             {
                 if (i != argc - 1)
                 {
-                    pool->add_provider(std::make_shared<Provider_DynamicallyLinkedLibrary_Query>(fs::absolute(argv[++i]).string()));
+                    pool->add_provider(
+                        std::make_shared<Provider_DynamicallyLinkedLibrary_Query>(fs::absolute(argv[++i]).string()));
                 }
                 continue;
             }

@@ -1,3 +1,10 @@
+/*
+ * Copyright (C) 2021-2022 Jianye Chen
+ *
+ * This software may be modified and distributed under the terms
+ * of the MIT license.  See the LICENSE file for details.
+ */
+
 #ifdef _WIN32
 #include <Windows.h>
 #else

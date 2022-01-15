@@ -1,3 +1,10 @@
+/*
+ * Copyright (C) 2021-2022 Jianye Chen
+ *
+ * This software may be modified and distributed under the terms
+ * of the MIT license.  See the LICENSE file for details.
+ */
+
 #ifndef PSP2CLDR_PROVIDER_H
 #define PSP2CLDR_PROVIDER_H
 
@@ -19,18 +26,22 @@ typedef std::shared_ptr<HandlerResult> (*provider_func_call)(InterruptContext *)
 
 class Provider
 {
-public:
-    Provider() {}
-    virtual ~Provider() {}
+  public:
+    Provider()
+    {
+    }
+    virtual ~Provider()
+    {
+    }
 
-public:
+  public:
     virtual provider_func_call get(uint32_t libraryNID, uint32_t functionNID) const = 0;
     virtual provider_func_call get(const std::string &name) const = 0;
 };
 
 class Provider_DynamicallyLinkedLibrary : public Provider
 {
-public:
+  public:
     Provider_DynamicallyLinkedLibrary(const std::string &name);
     virtual ~Provider_DynamicallyLinkedLibrary();
 
@@ -48,7 +59,7 @@ public:
         return (provider_func_call)get_impl(buf);
     }
 
-protected:
+  protected:
     std::string m_name;
     void *m_handle = nullptr;
     virtual void *get_impl(const std::string &) const;
@@ -56,15 +67,22 @@ protected:
 
 class Provider_StaticallyLinkedLibrary : public Provider_DynamicallyLinkedLibrary
 {
-public:
-    Provider_StaticallyLinkedLibrary() : Provider_DynamicallyLinkedLibrary("") {}
-    virtual ~Provider_StaticallyLinkedLibrary() { m_handle = nullptr; }
+  public:
+    Provider_StaticallyLinkedLibrary() : Provider_DynamicallyLinkedLibrary("")
+    {
+    }
+    virtual ~Provider_StaticallyLinkedLibrary()
+    {
+        m_handle = nullptr;
+    }
 };
 
 class Provider_DynamicallyLinkedLibrary_Query : public Provider_DynamicallyLinkedLibrary
 {
-public:
-    Provider_DynamicallyLinkedLibrary_Query(const std::string &name) : Provider_DynamicallyLinkedLibrary(name) {}
+  public:
+    Provider_DynamicallyLinkedLibrary_Query(const std::string &name) : Provider_DynamicallyLinkedLibrary(name)
+    {
+    }
 
     typedef provider_func_call (*nid_query_sig)(uint32_t, uint32_t);
     virtual provider_func_call get(uint32_t libraryNID, uint32_t functionNID) const
@@ -80,15 +98,17 @@ public:
 
     virtual ~Provider_DynamicallyLinkedLibrary_Query(){};
 
-protected:
+  protected:
     static inline const char nid_query[]{"query_nid"};
     static inline const char sym_query[]{"query_sym"};
 };
 
 class Provider_Pool : public Provider
 {
-public:
-    Provider_Pool() : Provider() {}
+  public:
+    Provider_Pool() : Provider()
+    {
+    }
     virtual ~Provider_Pool()
     {
         m_nid_cache.clear();
@@ -140,7 +160,7 @@ public:
         return NULL;
     }
 
-protected:
+  protected:
     mutable std::unordered_map<NIDHASH_t, std::weak_ptr<const Provider>> m_nid_cache;
     mutable std::unordered_map<std::string, std::weak_ptr<const Provider>> m_sym_cache;
     std::vector<std::shared_ptr<const Provider>> m_providers;

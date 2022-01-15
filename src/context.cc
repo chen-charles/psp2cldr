@@ -1,3 +1,10 @@
+/*
+ * Copyright (C) 2021-2022 Jianye Chen
+ *
+ * This software may be modified and distributed under the terms
+ * of the MIT license.  See the LICENSE file for details.
+ */
+
 #include <psp2cldr/context.hpp>
 
 #include <psp2cldr/coordinator.hpp>
@@ -28,11 +35,10 @@ static uint32_t allocate_stub_location(InterruptContext *ctx)
     static const size_t CONT_STUB_SIZE = 0x100000;
 
     // @TODO: put this onto coordinator using a tag
-    std::call_once(initialization_flag, [&]()
-                    {
-                        handler_stub_loc = ctx->coord.mmap(0, CONT_STUB_SIZE);
-                        handler_stub_top = handler_stub_loc + CONT_STUB_SIZE;
-                    });
+    std::call_once(initialization_flag, [&]() {
+        handler_stub_loc = ctx->coord.mmap(0, CONT_STUB_SIZE);
+        handler_stub_top = handler_stub_loc + CONT_STUB_SIZE;
+    });
 
     const uint32_t allocated = handler_stub_loc.fetch_add(0x8);
     if (handler_stub_top <= allocated + 0x8)
@@ -40,13 +46,14 @@ static uint32_t allocate_stub_location(InterruptContext *ctx)
     return allocated;
 }
 
-static void install_stub(LoadContext& ctx, uint32_t stub_loc, const sym_stub& stub)
+static void install_stub(LoadContext &ctx, uint32_t stub_loc, const sym_stub &stub)
 {
     std::unique_lock guard(ctx.unimplemented_targets_mutex);
     ctx.unimplemented_targets[stub_loc] = stub;
 }
 
-static std::shared_ptr<HandlerContinuation> _handler_call_target_function_impl(int n_params, uint32_t target_func_ptr, InterruptContext *ctx)
+static std::shared_ptr<HandlerContinuation> _handler_call_target_function_impl(int n_params, uint32_t target_func_ptr,
+                                                                               InterruptContext *ctx)
 {
     static const uint32_t INSTR_UDF0_ARM = 0xe7f000f0;
 
@@ -62,8 +69,7 @@ static std::shared_ptr<HandlerContinuation> _handler_call_target_function_impl(i
     uint32_t original_sp = ctx->thread[RegisterAccessProxy::Register::SP]->r();
     adjust_stack_for_parameters(ctx, n_params);
 
-    stub.func = [original_lr, original_sp, out, n_params](std::string name, Elf32_Sym sym, InterruptContext *p_ctx)
-    {
+    stub.func = [original_lr, original_sp, out, n_params](std::string name, Elf32_Sym sym, InterruptContext *p_ctx) {
         auto r0 = p_ctx->thread[RegisterAccessProxy::Register::R0]->r();
         p_ctx->thread[RegisterAccessProxy::Register::LR]->w(original_lr);
 
@@ -77,12 +83,13 @@ static std::shared_ptr<HandlerContinuation> _handler_call_target_function_impl(i
 
     ctx->thread[RegisterAccessProxy::Register::PC]->w(target_func_ptr);
     ctx->thread[RegisterAccessProxy::Register::LR]->w(stub_loc);
-    
+
     install_stub(ctx->load, stub_loc, stub);
     return out;
 }
 
-std::shared_ptr<HandlerContinuation> InterruptContext::handler_call_target_function_impl(int n_params, NIDHASH_t nid_hash)
+std::shared_ptr<HandlerContinuation> InterruptContext::handler_call_target_function_impl(int n_params,
+                                                                                         NIDHASH_t nid_hash)
 {
     if (load.nids_export_locations.count(nid_hash) == 0)
         throw std::logic_error("attempted to call an unregistered target function");

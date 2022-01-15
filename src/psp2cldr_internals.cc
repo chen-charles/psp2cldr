@@ -1,3 +1,10 @@
+/*
+ * Copyright (C) 2021-2022 Jianye Chen
+ *
+ * This software may be modified and distributed under the terms
+ * of the MIT license.  See the LICENSE file for details.
+ */
+
 /* __psp2cldr__internal_* routine implementations */
 #include <psp2cldr/imp_provider.hpp>
 
@@ -117,7 +124,8 @@ DEFINE_VITA_IMP_SYM_EXPORT(__psp2cldr__internal_call_nid)
     if (!ptr)
     {
         // treat as a strong symbol
-        LOG(CRITICAL, "__psp2cldr__internal_call_nid to {:#010x}:{:#010x} is hit, unimplemented", libraryNID, functionNID);
+        LOG(CRITICAL, "__psp2cldr__internal_call_nid to {:#010x}:{:#010x} is hit, unimplemented", libraryNID,
+            functionNID);
         HANDLER_RETURN(1);
     }
     return ptr(ctx);

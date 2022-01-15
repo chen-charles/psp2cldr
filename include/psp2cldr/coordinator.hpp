@@ -1,3 +1,10 @@
+/*
+ * Copyright (C) 2021-2022 Jianye Chen
+ *
+ * This software may be modified and distributed under the terms
+ * of the MIT license.  See the LICENSE file for details.
+ */
+
 #ifndef PSP2CLDR_EXECCOORD_H
 #define PSP2CLDR_EXECCOORD_H
 
@@ -19,9 +26,14 @@ class ExecutionCoordinator;
 
 class TLSKey
 {
-public:
-    TLSKey() {}
-    ~TLSKey() { mapping.clear(); }
+  public:
+    TLSKey()
+    {
+    }
+    ~TLSKey()
+    {
+        mapping.clear();
+    }
 
     std::mutex lock;
     std::unordered_map<uint32_t, uintptr_t> mapping; // threadID, value
@@ -32,8 +44,10 @@ class TLS
     static inline std::unordered_set<TLSKey *> tls;
     static inline std::recursive_mutex tls_mutex;
 
-public:
-    TLS(uint32_t threadID) : m_id(threadID) {}
+  public:
+    TLS(uint32_t threadID) : m_id(threadID)
+    {
+    }
 
     ~TLS()
     {
@@ -89,17 +103,17 @@ public:
             throw std::out_of_range("invalid key");
     }
 
-protected:
+  protected:
     uint32_t m_id;
 };
 
 class ExecutionThread
 {
-private:
+  private:
     static inline std::atomic<uint32_t> _id_ctr = 1;
     mutable uint32_t m_tid = 0;
 
-public:
+  public:
     uint32_t tid() const
     {
         if (m_tid == 0)
@@ -107,11 +121,15 @@ public:
         return m_tid;
     }
 
-public:
-    ExecutionThread() : tls(tid()) {}
-    virtual ~ExecutionThread() {}
+  public:
+    ExecutionThread() : tls(tid())
+    {
+    }
+    virtual ~ExecutionThread()
+    {
+    }
 
-public:
+  public:
     enum class THREAD_EXECUTION_STATE
     {
         UNSTARTED,
@@ -134,17 +152,19 @@ public:
 
     virtual const std::atomic<THREAD_EXECUTION_STATE> &state() const = 0;
     virtual THREAD_EXECUTION_RESULT start(uint32_t from, uint32_t until) = 0;
-    virtual THREAD_EXECUTION_RESULT join(uint32_t *retval = nullptr) = 0; // retval is set iff result is STOP_UNTIL_POINT_HIT
+    virtual THREAD_EXECUTION_RESULT join(
+        uint32_t *retval = nullptr) = 0; // retval is set iff result is STOP_UNTIL_POINT_HIT
     virtual void stop(uint32_t retval = 0) = 0;
 
     virtual void panic(int code = 0, LoadContext *load = nullptr) = 0;
 
-    virtual void register_interrupt_callback(std::function<void(ExecutionCoordinator &, ExecutionThread &, uint32_t)> callback) = 0;
+    virtual void register_interrupt_callback(
+        std::function<void(ExecutionCoordinator &, ExecutionThread &, uint32_t)> callback) = 0;
 
-public:
+  public:
     TLS tls;
 
-public:
+  public:
     // register access
     virtual std::shared_ptr<RegisterAccessProxy> operator[](RegisterAccessProxy::Register name) = 0;
     virtual std::shared_ptr<const RegisterAccessProxy> operator[](RegisterAccessProxy::Register name) const = 0;
@@ -152,18 +172,23 @@ public:
 
 class ExecutionCoordinator
 {
-public:
-    ExecutionCoordinator() {}
-    virtual ~ExecutionCoordinator() {}
+  public:
+    ExecutionCoordinator()
+    {
+    }
+    virtual ~ExecutionCoordinator()
+    {
+    }
 
-public:
+  public:
     virtual MemoryAccessProxy &proxy() const = 0;
     virtual uintptr_t mmap(uintptr_t preferred, size_t length) = 0; // always RWX
     virtual int munmap(uintptr_t addr, size_t length) = 0;
 
     /**
      * Threading Support
-     * on platforms that does not natively support target threading, only a single thread of execution on the target will be active at any given time.
+     * on platforms that does not natively support target threading, only a single thread of execution on the target
+     * will be active at any given time.
      */
     [[nodiscard]] virtual std::shared_ptr<ExecutionThread> thread_create() = 0;
     virtual int thread_destroy(std::weak_ptr<ExecutionThread> thread) = 0;
@@ -171,10 +196,12 @@ public:
     virtual void thread_stopall(int retval = 0) = 0;
 
     virtual void panic(int code = 0, LoadContext *load = nullptr) = 0;
-    virtual void panic(ExecutionThread *thread = nullptr, LoadContext *load = nullptr, int code = 0, const char *msg = nullptr); // forward to panic impl.
+    virtual void panic(ExecutionThread *thread = nullptr, LoadContext *load = nullptr, int code = 0,
+                       const char *msg = nullptr); // forward to panic impl.
 
     // default interrupt callback for all newly created threads
-    virtual void register_interrupt_callback(std::function<void(ExecutionCoordinator &, ExecutionThread &, uint32_t)> callback) = 0;
+    virtual void register_interrupt_callback(
+        std::function<void(ExecutionCoordinator &, ExecutionThread &, uint32_t)> callback) = 0;
 };
 
 // when running natively, exec state control is ~equivalent to a gdb client

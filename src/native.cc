@@ -1,3 +1,10 @@
+/*
+ * Copyright (C) 2021-2022 Jianye Chen
+ *
+ * This software may be modified and distributed under the terms
+ * of the MIT license.  See the LICENSE file for details.
+ */
+
 #include <cassert>
 #include <sys/mman.h>
 #include <sys/syscall.h> // syscall(SYS_gettid)
@@ -27,7 +34,8 @@ void *NativeMemoryAccessProxy::copy_out(void *dest, uint64_t src, size_t num) co
 
 uint32_t RegisterAccessProxy_Native::w(uint32_t value)
 {
-    *((unsigned long int *)(&(m_engine->m_target_ctx.uc_mcontext.arm_r0)) + reg_mapping.at(name())) = value; // implementation specific, assuming glibc
+    *((unsigned long int *)(&(m_engine->m_target_ctx.uc_mcontext.arm_r0)) + reg_mapping.at(name())) =
+        value; // implementation specific, assuming glibc
     return value;
 }
 
@@ -60,7 +68,8 @@ void _sig_handler(int sig, siginfo_t *info, void *ucontext)
     auto ctx = reinterpret_cast<ucontext_t *>(ucontext);
 
     // https://www.gnu.org/software/libc/manual/html_node/Thread_002dspecific-Data.html
-    ExecutionThread_Native *exec_thread = reinterpret_cast<ExecutionThread_Native *>(pthread_getspecific(thread_obj_key));
+    ExecutionThread_Native *exec_thread =
+        reinterpret_cast<ExecutionThread_Native *>(pthread_getspecific(thread_obj_key));
     if (!exec_thread)
     {
         if (is_stop) // the thread is already dead, ignore the stop request
@@ -73,7 +82,8 @@ void _sig_handler(int sig, siginfo_t *info, void *ucontext)
             return;
         }
 
-        LOG(CRITICAL, "did not find an exec_thread, falling back to default signal action, PC={:#010x}, LR={:#010x}", ctx->uc_mcontext.arm_pc, ctx->uc_mcontext.arm_lr);
+        LOG(CRITICAL, "did not find an exec_thread, falling back to default signal action, PC={:#010x}, LR={:#010x}",
+            ctx->uc_mcontext.arm_pc, ctx->uc_mcontext.arm_lr);
         switch (sig)
         {
         case SIGSEGV:
@@ -178,7 +188,8 @@ void *thread_bootstrap(thread_bootstrap_args *args)
     if (thread->m_target_ctx.uc_mcontext.arm_pc != thread->m_target_until_point)
     {
         LOG(TRACE, "execute({}): handling interrupt si_signo={:#x}", thread->tid(), thread->m_target_siginfo.si_signo);
-        if (thread->m_target_siginfo.si_signo == SIGILL || thread->m_target_siginfo.si_signo == SIGSEGV || thread->m_target_siginfo.si_signo == SIGINT || SIGINT_queued)
+        if (thread->m_target_siginfo.si_signo == SIGILL || thread->m_target_siginfo.si_signo == SIGSEGV ||
+            thread->m_target_siginfo.si_signo == SIGINT || SIGINT_queued)
         {
             if (SIGINT_queued)
             {
@@ -195,7 +206,8 @@ void *thread_bootstrap(thread_bootstrap_args *args)
             }
             else
             {
-                LOG(TRACE, "execute({}): interrupt handling complete, resuming execution at {:#010x}", thread->tid(), (*thread)[RegisterAccessProxy::Register::PC]->r());
+                LOG(TRACE, "execute({}): interrupt handling complete, resuming execution at {:#010x}", thread->tid(),
+                    (*thread)[RegisterAccessProxy::Register::PC]->r());
 
                 thread->m_handling_interrupt = false;
                 setcontext(&thread->m_target_ctx); // no return, or it failed
@@ -220,7 +232,8 @@ void *thread_bootstrap(thread_bootstrap_args *args)
 _done:
     pthread_setspecific(thread_obj_key, NULL);
 
-    _execute_recover_until_point(thread->m_target_until_point, thread->m_until_point_instr_backup, thread->m_coord.proxy());
+    _execute_recover_until_point(thread->m_target_until_point, thread->m_until_point_instr_backup,
+                                 thread->m_coord.proxy());
 
     thread->m_result = result;
     thread->m_state = ExecutionThread::THREAD_EXECUTION_STATE::RESTARTABLE;
@@ -433,19 +446,19 @@ void NativeEngineARM::panic(int code, LoadContext *load)
     for (auto &p_thread : m_threads)
     {
         PANIC_LOG("Thread: tid={:#x}", p_thread->tid());
-#define reg_info_dump(reg)                                                                              \
-    {                                                                                                   \
-        auto _reg_val = (*p_thread)[RegisterAccessProxy::Register::reg]->r();                           \
-        if (load)                                                                                       \
-        {                                                                                               \
-            auto _pair = load->try_resolve_location(_reg_val);                                          \
-            if (!_pair.first.empty())                                                                   \
-                PANIC_LOG("\t{}={:#010x}\t<{} + {:#010x}>", #reg, _reg_val, _pair.first, _pair.second); \
-            else                                                                                        \
-                PANIC_LOG("\t{}={:#010x}\t<\?\?>", #reg, _reg_val);                                     \
-        }                                                                                               \
-        else                                                                                            \
-            PANIC_LOG("\t{}={:#010x}", #reg, _reg_val);                                                 \
+#define reg_info_dump(reg)                                                                                             \
+    {                                                                                                                  \
+        auto _reg_val = (*p_thread)[RegisterAccessProxy::Register::reg]->r();                                          \
+        if (load)                                                                                                      \
+        {                                                                                                              \
+            auto _pair = load->try_resolve_location(_reg_val);                                                         \
+            if (!_pair.first.empty())                                                                                  \
+                PANIC_LOG("\t{}={:#010x}\t<{} + {:#010x}>", #reg, _reg_val, _pair.first, _pair.second);                \
+            else                                                                                                       \
+                PANIC_LOG("\t{}={:#010x}\t<\?\?>", #reg, _reg_val);                                                    \
+        }                                                                                                              \
+        else                                                                                                           \
+            PANIC_LOG("\t{}={:#010x}", #reg, _reg_val);                                                                \
     }
 
         reg_info_dump(R0);

@@ -1,3 +1,10 @@
+/*
+ * Copyright (C) 2021-2022 Jianye Chen
+ *
+ * This software may be modified and distributed under the terms
+ * of the MIT license.  See the LICENSE file for details.
+ */
+
 #ifndef VITA_ELF_H
 #define VITA_ELF_H
 
@@ -16,8 +23,10 @@
 
 class VELF : public ELFLoader_Base
 {
-public:
-    VELF(const std::string &filename) : VELF(std::ifstream(filename, std::ios::binary)) {}
+  public:
+    VELF(const std::string &filename) : VELF(std::ifstream(filename, std::ios::binary))
+    {
+    }
 
     VELF(std::ifstream &&stream) : ELFLoader_Base(std::move(stream))
     {
@@ -120,7 +129,8 @@ public:
         }
     }
 
-    virtual std::pair<uint32_t, uint32_t> load_and_relocate(std::function<uint32_t(uint32_t, size_t)> mmap_func, const MemoryAccessProxy &target) const
+    virtual std::pair<uint32_t, uint32_t> load_and_relocate(std::function<uint32_t(uint32_t, size_t)> mmap_func,
+                                                            const MemoryAccessProxy &target) const
     {
         assert(ifs);
 
@@ -193,8 +203,7 @@ public:
                 break;
 
             case R_ARM_CALL:
-            case R_ARM_JUMP24:
-            {
+            case R_ARM_JUMP24: {
                 uint32_t insn_off;
                 insn_off = target.r<uint16_t>(P) & 0xffffff;
                 insn_off = S + A - P;
@@ -216,8 +225,7 @@ public:
                 target.w<uint32_t>(P, (S - Offset + A) & 0x7fffffff | target.r<uint32_t>(P) & 0x4c4b400);
                 break;
             case R_ARM_MOVW_ABS_NC:
-            case R_ARM_MOVT_ABS:
-            {
+            case R_ARM_MOVT_ABS: {
                 struct
                 {
                     uint32_t imm12 : 12;
@@ -238,8 +246,7 @@ public:
             }
             break;
             case R_ARM_THM_MOVW_ABS_NC:
-            case R_ARM_THM_MOVT_ABS:
-            {
+            case R_ARM_THM_MOVT_ABS: {
                 struct
                 {
                     uint32_t imm4 : 4;
@@ -300,8 +307,10 @@ public:
             {
                 const sce_module_imports_short_raw *imp = &(item.short_import);
                 library_nid = imp->library_nid;
-                tables.push_back(std::make_pair(imp->num_syms_funcs, std::make_pair(imp->func_nid_table, imp->func_entry_table)));
-                tables.push_back(std::make_pair(imp->num_syms_vars, std::make_pair(imp->var_nid_table, imp->var_entry_table)));
+                tables.push_back(
+                    std::make_pair(imp->num_syms_funcs, std::make_pair(imp->func_nid_table, imp->func_entry_table)));
+                tables.push_back(
+                    std::make_pair(imp->num_syms_vars, std::make_pair(imp->var_nid_table, imp->var_entry_table)));
                 ifs.seekg(va2off(imp->library_name), std::ios::beg);
                 ifs.get(name, 255, '\0');
             }
@@ -309,8 +318,10 @@ public:
             {
                 const sce_module_imports_raw *imp = &(item.long_import);
                 library_nid = imp->library_nid;
-                tables.push_back(std::make_pair(imp->num_syms_funcs, std::make_pair(imp->func_nid_table, imp->func_entry_table)));
-                tables.push_back(std::make_pair(imp->num_syms_vars, std::make_pair(imp->var_nid_table, imp->var_entry_table)));
+                tables.push_back(
+                    std::make_pair(imp->num_syms_funcs, std::make_pair(imp->func_nid_table, imp->func_entry_table)));
+                tables.push_back(
+                    std::make_pair(imp->num_syms_vars, std::make_pair(imp->var_nid_table, imp->var_entry_table)));
                 ifs.seekg(va2off(imp->library_name), std::ios::beg);
                 ifs.get(name, 255, '\0');
             }
@@ -360,16 +371,18 @@ public:
         return out;
     }
 
-public:
-    virtual const char *name() const { return module_info.name; }
+  public:
+    virtual const char *name() const
+    {
+        return module_info.name;
+    }
 
-public:
+  public:
     sce_module_info_raw module_info;
     std::vector<sce_module_exports_raw> exports;
     struct sce_module_import_item
     {
-        union
-        {
+        union {
             sce_module_imports_short_raw short_import; // size == 0x24
             sce_module_imports_raw long_import;        // size == 0x34
         };

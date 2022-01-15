@@ -1,3 +1,10 @@
+/*
+ * Copyright (C) 2021-2022 Jianye Chen
+ *
+ * This software may be modified and distributed under the terms
+ * of the MIT license.  See the LICENSE file for details.
+ */
+
 #include <cassert>
 #include <chrono>
 #include <cstdlib>
@@ -131,15 +138,14 @@ DEFINE_VITA_IMP_SYM_EXPORT(basic_test_variable)
 
     if (_p_data == 0)
     {
-        return ctx->handler_call_target_function("malloc", 4)->then([&, p_var](uint32_t result, InterruptContext *ctx)
-                                                                    {
-                                                                        ctx->coord.proxy().w<uint32_t>(result, 42);
-                                                                        ctx->coord.proxy().w<uint32_t>(p_var, result);
-                                                                        std::lock_guard guard(_mutex);
-                                                                        _p_data = result;
-                                                                        TARGET_RETURN(0);
-                                                                        HANDLER_RETURN(0);
-                                                                    });
+        return ctx->handler_call_target_function("malloc", 4)->then([&, p_var](uint32_t result, InterruptContext *ctx) {
+            ctx->coord.proxy().w<uint32_t>(result, 42);
+            ctx->coord.proxy().w<uint32_t>(p_var, result);
+            std::lock_guard guard(_mutex);
+            _p_data = result;
+            TARGET_RETURN(0);
+            HANDLER_RETURN(0);
+        });
     }
     else
     {
@@ -173,7 +179,8 @@ DEFINE_VITA_IMP_NID_EXPORT(CAE9ACE6, C5C11EE7)
         (*thread)[RegisterAccessProxy::Register::LR]->w(lr);
 
         uint32_t result;
-        if (thread->start(la, lr) != ExecutionThread::THREAD_EXECUTION_RESULT::OK || (*thread).join(&result) != ExecutionThread::THREAD_EXECUTION_RESULT::STOP_UNTIL_POINT_HIT || result != 0)
+        if (thread->start(la, lr) != ExecutionThread::THREAD_EXECUTION_RESULT::OK ||
+            (*thread).join(&result) != ExecutionThread::THREAD_EXECUTION_RESULT::STOP_UNTIL_POINT_HIT || result != 0)
             break;
         if (sp != (*thread)[RegisterAccessProxy::Register::SP]->r())
         {
@@ -192,7 +199,8 @@ DEFINE_VITA_IMP_NID_EXPORT(CAE9ACE6, C5C11EE7)
 
     (*thread)[RegisterAccessProxy::Register::SP]->w(ctx->coord.mmap(0, new_stacksz) + new_stacksz);
     (*thread)[RegisterAccessProxy::Register::LR]->w(lr);
-    (*thread)[RegisterAccessProxy::Register::IP]->w(new_pc); // we will store this in IP, start thread will use this value as PC
+    (*thread)[RegisterAccessProxy::Register::IP]->w(
+        new_pc); // we will store this in IP, start thread will use this value as PC
 
     {
         std::lock_guard<std::mutex> guard{threads_lock};
@@ -215,7 +223,8 @@ DEFINE_VITA_IMP_NID_EXPORT(CAE9ACE6, F08DE149)
         {
             (*thread)[RegisterAccessProxy::Register::R0]->w(PARAM(ctx, 1));
             (*thread)[RegisterAccessProxy::Register::R1]->w(PARAM(ctx, 2));
-            thread->start((*thread)[RegisterAccessProxy::Register::IP]->r(), (*thread)[RegisterAccessProxy::Register::LR]->r());
+            thread->start((*thread)[RegisterAccessProxy::Register::IP]->r(),
+                          (*thread)[RegisterAccessProxy::Register::LR]->r());
         }
     }
 
@@ -250,7 +259,9 @@ DEFINE_VITA_IMP_NID_EXPORT(859A24B1, 1BBDE3D9)
             (*thread)[RegisterAccessProxy::Register::LR]->w(lr);
 
             uint32_t result;
-            if (thread->start(la, lr) != ExecutionThread::THREAD_EXECUTION_RESULT::OK || (*thread).join(&result) != ExecutionThread::THREAD_EXECUTION_RESULT::STOP_UNTIL_POINT_HIT || result != 0)
+            if (thread->start(la, lr) != ExecutionThread::THREAD_EXECUTION_RESULT::OK ||
+                (*thread).join(&result) != ExecutionThread::THREAD_EXECUTION_RESULT::STOP_UNTIL_POINT_HIT ||
+                result != 0)
                 break;
             if (sp != (*thread)[RegisterAccessProxy::Register::SP]->r())
             {

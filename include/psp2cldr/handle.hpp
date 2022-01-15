@@ -1,3 +1,10 @@
+/*
+ * Copyright (C) 2021-2022 Jianye Chen
+ *
+ * This software may be modified and distributed under the terms
+ * of the MIT license.  See the LICENSE file for details.
+ */
+
 #ifndef OSL_HANDLE_H
 #define OSL_HANDLE_H
 
@@ -18,7 +25,7 @@ class HandleAllocator
     static inline std::mt19937 generator{HandleAllocator::rand_dev()};
     static inline std::mutex generator_lock;
 
-public:
+  public:
     // [valid_low, valid_high]
     HandleAllocator(OSL_HANDLE low, OSL_HANDLE high = INT32_MAX) : m_low(low), m_high(high), m_distr(low, high)
     {
@@ -26,9 +33,11 @@ public:
             throw std::invalid_argument("handler space is too small");
     }
 
-    virtual ~HandleAllocator() {}
+    virtual ~HandleAllocator()
+    {
+    }
 
-public:
+  public:
     virtual bool is_valid(OSL_HANDLE key) const
     {
         std::lock_guard guard{m_lock};
@@ -62,7 +71,7 @@ public:
             throw std::invalid_argument("attempted to free a handle that was not allocated");
     }
 
-protected:
+  protected:
     OSL_HANDLE m_low;
     OSL_HANDLE m_high;
 
@@ -73,14 +82,17 @@ protected:
 };
 
 // MT-safe
-template <class T>
-class HandleStorage : public HandleAllocator
+template <class T> class HandleStorage : public HandleAllocator
 {
-public:
-    HandleStorage(OSL_HANDLE low, OSL_HANDLE high = INT32_MAX) : HandleAllocator(low, high) {}
-    virtual ~HandleStorage() {}
+  public:
+    HandleStorage(OSL_HANDLE low, OSL_HANDLE high = INT32_MAX) : HandleAllocator(low, high)
+    {
+    }
+    virtual ~HandleStorage()
+    {
+    }
 
-public:
+  public:
     virtual OSL_HANDLE alloc(const T &t)
     {
         std::lock_guard guard{m_lock};
@@ -112,7 +124,7 @@ public:
         HandleAllocator::free(key);
     }
 
-public:
+  public:
     virtual T &operator[](OSL_HANDLE idx)
     {
         std::lock_guard guard{m_lock};
@@ -125,7 +137,7 @@ public:
         return m_storage.at(key);
     }
 
-protected:
+  protected:
     std::unordered_map<OSL_HANDLE, T> m_storage;
 };
 

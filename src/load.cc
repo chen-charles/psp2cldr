@@ -1,3 +1,10 @@
+/*
+ * Copyright (C) 2021-2022 Jianye Chen
+ *
+ * This software may be modified and distributed under the terms
+ * of the MIT license.  See the LICENSE file for details.
+ */
+
 #include <psp2cldr/access_proxy.hpp>
 #include <psp2cldr/context.hpp>
 #include <psp2cldr/coordinator.hpp>
@@ -28,54 +35,54 @@ static std::shared_ptr<ExecutionThread> init_main_thread(LoadContext &ctx, Execu
     if (!thread)
     {
         LOG(DEBUG, "preparing execution environment for init");
-        coordinator.register_interrupt_callback(
-            [&ctx](ExecutionCoordinator &coord, ExecutionThread &thread, uint32_t intno)
+        coordinator.register_interrupt_callback([&ctx](ExecutionCoordinator &coord, ExecutionThread &thread,
+                                                       uint32_t intno) {
+            InterruptContext intr_ctx(coord, thread, ctx);
+            auto pc = thread[RegisterAccessProxy::Register::PC]->r();
+            if (intno == POSIX_SIGILL)
             {
-                InterruptContext intr_ctx(coord, thread, ctx);
-                auto pc = thread[RegisterAccessProxy::Register::PC]->r();
-                if (intno == POSIX_SIGILL)
+                if (thread[RegisterAccessProxy::Register::CPSR]->r() & (1 << 5))
+                    pc |= 1;
+                bool entry_exists = false;
+                import_stub_entry entry;
                 {
-                    if (thread[RegisterAccessProxy::Register::CPSR]->r() & (1 << 5))
-                        pc |= 1;
-                    bool entry_exists = false;
-                    import_stub_entry entry;
+                    std::shared_lock guard(ctx.unimplemented_targets_mutex);
+                    if (ctx.unimplemented_targets.count(pc) != 0)
                     {
-                        std::shared_lock guard(ctx.unimplemented_targets_mutex);
-                        if (ctx.unimplemented_targets.count(pc) != 0)
-                        {
-                            entry_exists = true;
-                            entry = ctx.unimplemented_targets.at(pc);
-                        }
+                        entry_exists = true;
+                        entry = ctx.unimplemented_targets.at(pc);
                     }
+                }
 
-                    if (entry_exists)
+                if (entry_exists)
+                {
+                    LOG(TRACE, "handler({}): {}", thread.tid(), entry.repr());
+                    auto handler_result = entry.call(&intr_ctx);
+                    LOG(TRACE, "handler({}) exit: {}", thread.tid(), entry.repr());
+                    if (const std::exception *handler_excp = handler_result->exception())
                     {
-                        LOG(TRACE, "handler({}): {}", thread.tid(), entry.repr());
-                        auto handler_result = entry.call(&intr_ctx);
-                        LOG(TRACE, "handler({}) exit: {}", thread.tid(), entry.repr());
-                        if (const std::exception *handler_excp = handler_result->exception())
-                        {
-                            intr_ctx.panic(0xff, handler_excp->what());
-                        }
-                        else if (handler_result->result() == 0)
-                            return;
-                        else
-                        {
-                            LOG(CRITICAL, "handler {} returned {:#010x} != 0, die ...", entry.repr(), handler_result->result());
-                            intr_ctx.panic(1);
-                        }
+                        intr_ctx.panic(0xff, handler_excp->what());
                     }
+                    else if (handler_result->result() == 0)
+                        return;
                     else
                     {
-                        LOG(CRITICAL, "unexpected SIGILL at {:#010x}, instr={:#010x}", pc, coord.proxy().r<uint32_t>(pc));
-                        intr_ctx.panic(2);
+                        LOG(CRITICAL, "handler {} returned {:#010x} != 0, die ...", entry.repr(),
+                            handler_result->result());
+                        intr_ctx.panic(1);
                     }
                 }
                 else
                 {
-                    intr_ctx.panic(3);
+                    LOG(CRITICAL, "unexpected SIGILL at {:#010x}, instr={:#010x}", pc, coord.proxy().r<uint32_t>(pc));
+                    intr_ctx.panic(2);
                 }
-            });
+            }
+            else
+            {
+                intr_ctx.panic(3);
+            }
+        });
 
         thread = coordinator.thread_create();
     }
@@ -83,7 +90,8 @@ static std::shared_ptr<ExecutionThread> init_main_thread(LoadContext &ctx, Execu
     return thread;
 }
 
-static int call_from_main_thread(std::vector<uintptr_t> init_routines, LoadContext &ctx, ExecutionCoordinator &coordinator)
+static int call_from_main_thread(std::vector<uintptr_t> init_routines, LoadContext &ctx,
+                                 ExecutionCoordinator &coordinator)
 {
     // there is a single mainthread through the lifetime of an application
     // upon its exit, all subsequent threads are killed
@@ -108,7 +116,8 @@ static int call_from_main_thread(std::vector<uintptr_t> init_routines, LoadConte
         (*thread)[RegisterAccessProxy::Register::R0]->w(0);
 
         uint32_t result;
-        if (thread->start(la, lr) != ExecutionThread::THREAD_EXECUTION_RESULT::OK || (*thread).join(&result) != ExecutionThread::THREAD_EXECUTION_RESULT::STOP_UNTIL_POINT_HIT)
+        if (thread->start(la, lr) != ExecutionThread::THREAD_EXECUTION_RESULT::OK ||
+            (*thread).join(&result) != ExecutionThread::THREAD_EXECUTION_RESULT::STOP_UNTIL_POINT_HIT)
             break;
         if (sp != (*thread)[RegisterAccessProxy::Register::SP]->r())
         {
@@ -125,7 +134,8 @@ static int call_from_main_thread(std::vector<uintptr_t> init_routines, LoadConte
     return succ_counter;
 }
 
-static void install_nid_stub(LoadContext &ctx, MemoryAccessProxy &proxy, uint32_t libraryNID, uint32_t functionNID, uint32_t ptr_f, bool in_place, unimplemented_nid_handler stub_func)
+static void install_nid_stub(LoadContext &ctx, MemoryAccessProxy &proxy, uint32_t libraryNID, uint32_t functionNID,
+                             uint32_t ptr_f, bool in_place, unimplemented_nid_handler stub_func)
 {
     uint32_t stub_location;
     if (in_place)
@@ -203,11 +213,7 @@ int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinato
     LOG(DEBUG, "loading and applying relocations");
     auto &proxy = coordinator.proxy();
     auto load_info = velf.load_and_relocate(
-        [&coordinator](uint32_t addr, size_t len)
-        {
-            return coordinator.mmap(addr, len);
-        },
-        proxy);
+        [&coordinator](uint32_t addr, size_t len) { return coordinator.mmap(addr, len); }, proxy);
     auto &load_base = load_info.first;
     LOG(INFO, "load base={:#010x}, load top={:#010x}", load_base, load_base + load_info.second);
 
@@ -231,8 +237,7 @@ int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinato
                 if (type_of_import == ProviderPokeResult::VARIABLE)
                 {
                     install_nid_stub(ctx, proxy, libraryNID, functionNID, ptr_f, true,
-                                     [](NID_t libraryNID, NID_t functionNID, InterruptContext *ctx)
-                                     {
+                                     [](NID_t libraryNID, NID_t functionNID, InterruptContext *ctx) {
                                          return ctx->load.provider()->get(libraryNID, functionNID)(ctx);
                                      });
                     init_routines.push_back(ptr_f);
@@ -240,8 +245,7 @@ int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinato
                 else
                 {
                     install_nid_stub(ctx, proxy, libraryNID, functionNID, ptr_f, false,
-                                     [](NID_t libraryNID, NID_t functionNID, InterruptContext *ctx)
-                                     {
+                                     [](NID_t libraryNID, NID_t functionNID, InterruptContext *ctx) {
                                          return ctx->load.provider()->get(libraryNID, functionNID)(ctx);
                                      });
                 }
@@ -275,9 +279,9 @@ int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinato
             else
             {
                 install_nid_stub(ctx, proxy, libraryNID, functionNID, ptr_f, false,
-                                 [](NID_t libraryNID, NID_t functionNID, InterruptContext *ctx)
-                                 {
-                                     LOG(CRITICAL, "import stub for {:#010x}:{:#010x} is hit, unimplemented", libraryNID, functionNID);
+                                 [](NID_t libraryNID, NID_t functionNID, InterruptContext *ctx) {
+                                     LOG(CRITICAL, "import stub for {:#010x}:{:#010x} is hit, unimplemented",
+                                         libraryNID, functionNID);
                                      return std::make_shared<HandlerResult>(1);
                                  });
                 LOG(TRACE, "import stub created for {:#010x}:{:#010x} at {:#010x}", libraryNID, functionNID, ptr_f);
@@ -339,7 +343,8 @@ int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinato
 }
 
 #include <psp2cldr/arm_elfloader.hpp>
-static void install_sym_stub(LoadContext &ctx, ExecutionCoordinator &coordinator, std::string sym_name, Elf32_Sym sym, uint32_t ptr_f, bool in_place, unimplemented_sym_handler stub_func)
+static void install_sym_stub(LoadContext &ctx, ExecutionCoordinator &coordinator, std::string sym_name, Elf32_Sym sym,
+                             uint32_t ptr_f, bool in_place, unimplemented_sym_handler stub_func)
 {
     auto &proxy = coordinator.proxy();
 
@@ -401,12 +406,8 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
 
     LOG(DEBUG, "loading and applying relocations");
     auto &proxy = coordinator.proxy();
-    auto load_info = elf.load_and_relocate(
-        [&coordinator](uint32_t addr, size_t len)
-        {
-            return coordinator.mmap(addr, len);
-        },
-        proxy);
+    auto load_info =
+        elf.load_and_relocate([&coordinator](uint32_t addr, size_t len) { return coordinator.mmap(addr, len); }, proxy);
     auto &load_base = load_info.first;
     LOG(INFO, "load base={:#010x}, load top={:#010x}", load_base, load_base + load_info.second);
 
@@ -433,14 +434,18 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
 
             if (type_of_import == ProviderPokeResult::VARIABLE)
             {
-                install_sym_stub(ctx, coordinator, sym_name, imp.first, ptr_f, true, [](std::string name, Elf32_Sym sym, InterruptContext *ctx)
-                                 { return ctx->load.provider()->get(name.c_str())(ctx); });
+                install_sym_stub(ctx, coordinator, sym_name, imp.first, ptr_f, true,
+                                 [](std::string name, Elf32_Sym sym, InterruptContext *ctx) {
+                                     return ctx->load.provider()->get(name.c_str())(ctx);
+                                 });
                 init_routines.push_back(ptr_f);
             }
             else
             {
-                install_sym_stub(ctx, coordinator, sym_name, imp.first, ptr_f, false, [](std::string name, Elf32_Sym sym, InterruptContext *ctx)
-                                 { return ctx->load.provider()->get(name.c_str())(ctx); });
+                install_sym_stub(ctx, coordinator, sym_name, imp.first, ptr_f, false,
+                                 [](std::string name, Elf32_Sym sym, InterruptContext *ctx) {
+                                     return ctx->load.provider()->get(name.c_str())(ctx);
+                                 });
             }
         }
         else if (ctx.libs_export_locations.count(sym_name) != 0)
@@ -462,12 +467,13 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
             {
                 ctx.libs_preemptable_symbols[sym_name].push_back(ptr_f);
                 if (sym.st_shndx == SHN_UNDEF)
-                    LOG(TRACE, "weak import \"{}\" might need a definition", sym_name); // it is perfectly fine to not exist, however
+                    LOG(TRACE, "weak import \"{}\" might need a definition",
+                        sym_name); // it is perfectly fine to not exist, however
             }
             else
                 // TODO: remove, since the importer does not know if the stub is installed on a ptr to a variable
-                install_sym_stub(ctx, coordinator, sym_name, imp.first, ptr_f, false, [](std::string name, Elf32_Sym sym, InterruptContext *ctx)
-                                 {
+                install_sym_stub(ctx, coordinator, sym_name, imp.first, ptr_f, false,
+                                 [](std::string name, Elf32_Sym sym, InterruptContext *ctx) {
                                      if (ctx->load.libs_export_locations.count(name) == 0)
                                      {
                                          LOG(CRITICAL, "import stub for {} is hit, unimplemented", name);
@@ -477,9 +483,9 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
                                      {
                                          return std::dynamic_pointer_cast<HandlerResult>(
                                              ctx->handler_call_target_function(name)->then(
-                                                 [](uint32_t result, InterruptContext *ctx)
-                                                 {
-                                                     ctx->thread[RegisterAccessProxy::Register::PC]->w(ctx->thread[RegisterAccessProxy::Register::LR]->r());
+                                                 [](uint32_t result, InterruptContext *ctx) {
+                                                     ctx->thread[RegisterAccessProxy::Register::PC]->w(
+                                                         ctx->thread[RegisterAccessProxy::Register::LR]->r());
                                                      return std::make_shared<HandlerResult>(0);
                                                  }));
                                      }
@@ -506,8 +512,10 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
             }
             else
             {
-                install_sym_stub(ctx, coordinator, exp_name, exp.first, ptr_f, true, [](std::string name, Elf32_Sym sym, InterruptContext *ctx)
-                                 { return ctx->load.provider()->get(name.c_str())(ctx); });
+                install_sym_stub(ctx, coordinator, exp_name, exp.first, ptr_f, true,
+                                 [](std::string name, Elf32_Sym sym, InterruptContext *ctx) {
+                                     return ctx->load.provider()->get(name.c_str())(ctx);
+                                 });
             }
         }
 
@@ -515,8 +523,11 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
         {
             /* DEPRECATION */
             /* make sure _exit is not called, otherwise newlib shuts down */
-            LOG(WARN, "ELF \"{}\" is exporting \"_start\", is it compiled as an executable instead of a shared library?", filename);
-            LOG(WARN, "If it is indeed a shared library, please use \"static void __attribute__((constructor))\" instead. ");
+            LOG(WARN,
+                "ELF \"{}\" is exporting \"_start\", is it compiled as an executable instead of a shared library?",
+                filename);
+            LOG(WARN,
+                "If it is indeed a shared library, please use \"static void __attribute__((constructor))\" instead. ");
             ptr__start = ptr_f;
         }
     }

@@ -1,5 +1,12 @@
-#ifndef _SEMA_H
-#define _SEMA_H
+/*
+ * Copyright (C) 2021-2022 Jianye Chen
+ *
+ * This software may be modified and distributed under the terms
+ * of the MIT license.  See the LICENSE file for details.
+ */
+
+#ifndef PSP2CLDR_SEMA_H
+#define PSP2CLDR_SEMA_H
 
 #include <chrono>
 #include <condition_variable>
@@ -11,15 +18,18 @@
 
 class semaphore
 {
-public:
-    semaphore(uintptr_t initial = 0) : m_ct(initial) {}
-    virtual ~semaphore() {}
+  public:
+    semaphore(uintptr_t initial = 0) : m_ct(initial)
+    {
+    }
+    virtual ~semaphore()
+    {
+    }
 
     void acquire()
     {
         std::unique_lock lk{m_lock};
-        m_cv.wait(lk, [&]()
-                  { return m_ct; });
+        m_cv.wait(lk, [&]() { return m_ct; });
         m_ct--;
     }
 
@@ -28,17 +38,16 @@ public:
         friend class scoped_canceler;
         mutable semaphore *sema;
 
-    protected:
+      protected:
         std::atomic<bool> cancelled{false};
 
-    public:
+      public:
         class scoped_canceler
         {
             const canceler &canc;
 
-        public:
-            scoped_canceler(const canceler &in_canc, semaphore *in_sema)
-                : canc(in_canc)
+          public:
+            scoped_canceler(const canceler &in_canc, semaphore *in_sema) : canc(in_canc)
             {
                 canc.sema = in_sema;
             }
@@ -76,14 +85,13 @@ public:
             return false;
         }
 
-        if (m_cv.wait_for(lk, dur, [&]()
-                          {
-                              if (canc.is_cancelled())
-                              {
-                                  return true;
-                              }
-                              return m_ct != 0;
-                          }))
+        if (m_cv.wait_for(lk, dur, [&]() {
+                if (canc.is_cancelled())
+                {
+                    return true;
+                }
+                return m_ct != 0;
+            }))
         {
             if (canc.is_cancelled())
             {
@@ -97,7 +105,8 @@ public:
     }
 
     template <class Rep, class Period, class LockGuardClass>
-    bool cancellable_acquire_for(std::chrono::duration<Rep, Period> dur, LockGuardClass &guard, const canceler &canc = {})
+    bool cancellable_acquire_for(std::chrono::duration<Rep, Period> dur, LockGuardClass &guard,
+                                 const canceler &canc = {})
     {
         std::unique_lock lk{m_lock};
 
@@ -110,13 +119,13 @@ public:
             return false;
         }
 
-        if (m_cv.wait_for(lk, dur, [&]()
-                          {
-                              if (canc.is_cancelled())
-                              {
-                                  return true;
-                              }
-                              return m_ct != 0; }))
+        if (m_cv.wait_for(lk, dur, [&]() {
+                if (canc.is_cancelled())
+                {
+                    return true;
+                }
+                return m_ct != 0;
+            }))
         {
             if (canc.is_cancelled())
             {
@@ -147,21 +156,26 @@ public:
         m_cv.notify_one();
     }
 
-protected:
+  protected:
     std::mutex m_lock;
     std::condition_variable m_cv;
     uintptr_t m_ct = 0;
 };
 
-template <class T>
-class semaphore_guard
+template <class T> class semaphore_guard
 {
-public:
-    semaphore_guard(T &sema) : m_sema(sema) { m_sema.acquire(); }
+  public:
+    semaphore_guard(T &sema) : m_sema(sema)
+    {
+        m_sema.acquire();
+    }
     semaphore_guard(const T &) = delete;
-    virtual ~semaphore_guard() { m_sema.release(); }
+    virtual ~semaphore_guard()
+    {
+        m_sema.release();
+    }
 
-private:
+  private:
     T &m_sema;
 };
 

@@ -1,3 +1,10 @@
+/*
+ * Copyright (C) 2021-2022 Jianye Chen
+ *
+ * This software may be modified and distributed under the terms
+ * of the MIT license.  See the LICENSE file for details.
+ */
+
 #ifndef PSP2CLDR_LOGGER_H
 #define PSP2CLDR_LOGGER_H
 
@@ -11,7 +18,7 @@
 
 class psp2cldr_logger_wrap
 {
-public:
+  public:
     static std::shared_ptr<spdlog::logger> get_instance()
     {
         if (!m_logger.get())
@@ -27,7 +34,7 @@ public:
         return m_logger;
     }
 
-private:
+  private:
     static inline std::shared_ptr<spdlog::logger> m_logger;
 };
 
@@ -39,7 +46,7 @@ private:
 
 class psp2cldr_panic_logger_wrap
 {
-public:
+  public:
     static std::shared_ptr<spdlog::logger> get_instance()
     {
         if (!m_logger.get())
@@ -50,7 +57,7 @@ public:
         return m_logger;
     }
 
-private:
+  private:
     static inline std::shared_ptr<spdlog::logger> m_logger;
 };
 
