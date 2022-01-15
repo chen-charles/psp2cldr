@@ -252,6 +252,8 @@ ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Native::start(uint32_t 
     {
         std::lock_guard guard{m_thread_lock};
 
+        m_state = THREAD_EXECUTION_STATE::RUNNING;
+
         if (pthread_create(&m_thread, NULL, (void *(*)(void *))thread_bootstrap, this) != 0)
         {
             _execute_recover_until_point(until, m_until_point_instr_backup, m_coord.proxy());
@@ -261,7 +263,6 @@ ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Native::start(uint32_t 
         m_thread_is_valid = true;
     }
 
-    m_state = THREAD_EXECUTION_STATE::RUNNING;
     return THREAD_EXECUTION_RESULT::OK;
 }
 
