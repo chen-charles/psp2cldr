@@ -289,8 +289,7 @@ int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinato
         }
     }
 
-    // note: inaccurate, the actual entry might be a thumb instr., but this addr is always indicating an ARM instr.
-    uintptr_t module_start = velf.off2la(velf.module_info.module_start, load_base);
+    uintptr_t module_start = 0;
 
     LOG(DEBUG, "finding module_start");
     auto exps = velf.get_exports();
@@ -312,7 +311,14 @@ int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinato
     }
 
     if (!module_start)
-        throw std::runtime_error("module_start is not exported");
+    {
+        // note: inaccurate, the actual entry might be a thumb instr., but this addr is always indicating an ARM instr.
+        module_start = velf.off2la(velf.module_info.module_start, load_base);
+        if (!module_start)
+        {
+            throw std::runtime_error("module_start is not exported");
+        }
+    }
 
     init_routines.push_back(module_start);
 
