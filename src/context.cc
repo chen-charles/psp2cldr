@@ -128,6 +128,7 @@ void InterruptContext::set_function_call_parameter(int idx, uint32_t value)
 
 std::shared_ptr<HandlerResult> InterruptContext::install_forward_handler(std::string target)
 {
+#ifndef NDEBUG
     auto &proxy = coord.proxy();
     if (load.libs_export_locations.count(target))
     {
@@ -160,6 +161,19 @@ std::shared_ptr<HandlerResult> InterruptContext::install_forward_handler(std::st
 
     // target does not exist
     return std::make_shared<HandlerResult>(1);
+#else
+    static std::atomic<uint64_t> identifier{0};
+    uint64_t this_id = identifier.fetch_add(1, std::memory_order_seq_cst);
+    LOG(TRACE, "({}) fwd to {} BEGIN R0={:#010x} LR={:#010x}", this_id, target,
+        thread[RegisterAccessProxy::Register::R0]->r(), thread[RegisterAccessProxy::Register::LR]->r());
+    return handler_call_target_function(target)->then([=](uint32_t result, InterruptContext *ctx) {
+        LOG(TRACE, "({}) fwd to {} END R0={:#010x}", this_id, target,
+            ctx->thread[RegisterAccessProxy::Register::R0]->r());
+        ctx->thread[RegisterAccessProxy::Register::R0]->w(result);
+        ctx->thread[RegisterAccessProxy::Register::PC]->w(ctx->thread[RegisterAccessProxy::Register::LR]->r());
+        return std::make_shared<HandlerResult>(0);
+    });
+#endif
 }
 
 std::string InterruptContext::read_str(uint32_t p_cstr) const
