@@ -32,7 +32,7 @@ static uint32_t allocate_stub_location(InterruptContext *ctx)
 
     static std::atomic<uint32_t> handler_stub_loc;
     static uint32_t handler_stub_top;
-    static const size_t CONT_STUB_SIZE = 0x100000;
+    static const size_t CONT_STUB_SIZE = 0x400000;
 
     // @TODO: put this onto coordinator using a tag
     std::call_once(initialization_flag, [&]() {
@@ -128,7 +128,7 @@ void InterruptContext::set_function_call_parameter(int idx, uint32_t value)
 
 std::shared_ptr<HandlerResult> InterruptContext::install_forward_handler(std::string target)
 {
-#ifndef NDEBUG
+#ifdef NDEBUG
     auto &proxy = coord.proxy();
     if (load.libs_export_locations.count(target))
     {

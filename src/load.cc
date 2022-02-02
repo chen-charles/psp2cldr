@@ -56,9 +56,11 @@ static std::shared_ptr<ExecutionThread> init_main_thread(LoadContext &ctx, Execu
 
                 if (entry_exists)
                 {
-                    LOG(TRACE, "handler({}): {}", thread.tid(), entry.repr());
+                    LOG(TRACE, "handler({}): {} LR={:#010x}", thread.tid(), entry.repr(),
+                        thread[RegisterAccessProxy::Register::LR]->r());
                     auto handler_result = entry.call(&intr_ctx);
-                    LOG(TRACE, "handler({}) exit: {}", thread.tid(), entry.repr());
+                    LOG(TRACE, "handler({}) exit: {} LR={:#010x}", thread.tid(), entry.repr(),
+                        thread[RegisterAccessProxy::Register::LR]->r());
                     if (const std::exception *handler_excp = handler_result->exception())
                     {
                         intr_ctx.panic(0xff, handler_excp->what());
