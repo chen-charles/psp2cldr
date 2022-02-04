@@ -13,9 +13,9 @@
 #include <psp2cldr/coordinator.hpp>
 
 #if PSP2CLDR_NATIVE
-#include <psp2cldr/native.hpp>
+#include <psp2cldr/implementation/native.hpp>
 #elif PSP2CLDR_EMULATION
-#include <psp2cldr/emulation.hpp>
+#include <psp2cldr/implementation/emulation.hpp>
 #else
 #error Either PSP2CLDR_NATIVE or PSP2CLDR_EMULATION must be defined.
 #endif

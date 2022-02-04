@@ -1,20 +1,29 @@
 cmake_minimum_required(VERSION 3.12)
 
 cmake_policy(SET CMP0076 NEW)
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/impls)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_ENABLE_EXPORTS ON)
 
 project(psp2cldr)
-option (BUILD_SAMPLES "build sample implementations" ON)
 
 add_executable(psp2cldr
     src/psp2cldr.cc src/load.cc src/provider.cc src/context.cc src/memory_managers.cc src/psp2cldr_internals.cc
 )
-include_directories(include)
 
+FILE(GLOB PSP2CLDR_CORE_HEADER
+    ${PROJECT_SOURCE_DIR}/include/psp2cldr/*.h
+    ${PROJECT_SOURCE_DIR}/include/psp2cldr/*.hpp
+)
+FILE(GLOB PSP2CLDR_UTIL_HEADER
+    ${PROJECT_SOURCE_DIR}/include/psp2cldr/utility/*.h
+    ${PROJECT_SOURCE_DIR}/include/psp2cldr/utility/*.hpp
+)
+set(PSP2CLDR_VERSION 0.2.0-alpha)
+set_target_properties(psp2cldr PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+    VERSION ${PSP2CLDR_VERSION}
+)
+target_include_directories(psp2cldr PUBLIC include)
 
 find_package(spdlog REQUIRED)
 target_link_libraries(psp2cldr PRIVATE spdlog::spdlog)
@@ -43,7 +52,7 @@ if (${FIND_ARMv7A_RET} GREATER "0")
         message(STATUS "Using PSP2CLDR_NATIVE")
         add_compile_definitions(PSP2CLDR_NATIVE=1)
         add_compile_options(-fstack-protector-strong)
-        target_sources(psp2cldr PRIVATE "include/psp2cldr/native.hpp" "src/native.cc")
+        target_sources(psp2cldr PRIVATE "include/psp2cldr/implementation/native.hpp" "src/native.cc")
 
     else()
         unset(HAVE_SETCONTEXT CACHE)
@@ -54,10 +63,18 @@ if (${FIND_ARMv7A_RET} GREATER "0")
     endif() 
 endif()
 
-if (${BUILD_SAMPLES})
-    add_subdirectory(sample_implementations)
-endif()
+include(GNUInstallDirs)
 
-if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/implementations")
-    add_subdirectory(implementations)
-endif()
+set(pkg_config "${CMAKE_BINARY_DIR}/${PROJECT_NAME}.pc")
+set(pkgconfig_install_dir "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
+configure_file("cmake/${PROJECT_NAME}.pc.in" "${pkg_config}" @ONLY)
+install(FILES "${pkg_config}" DESTINATION "${pkgconfig_install_dir}")
+
+install(FILES ${PSP2CLDR_CORE_HEADER} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/psp2cldr)
+install(FILES ${PSP2CLDR_UTIL_HEADER} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/psp2cldr/utility)
+install(TARGETS psp2cldr
+        EXPORT psp2cldr
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)

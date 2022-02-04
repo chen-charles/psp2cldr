@@ -10,10 +10,10 @@
 #include <sys/syscall.h> // syscall(SYS_gettid)
 #include <unistd.h>
 
-#include <psp2cldr/logger.hpp>
-#include <psp2cldr/native.hpp>
+#include <psp2cldr/implementation/logger.hpp>
+#include <psp2cldr/implementation/native.hpp>
 
-#include <psp2cldr/semaphore.hpp>
+#include <psp2cldr/utility/semaphore.hpp>
 
 pthread_key_t thread_obj_key;
 static bool SIGINT_queued = false;

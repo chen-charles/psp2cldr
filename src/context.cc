@@ -8,7 +8,7 @@
 #include <psp2cldr/context.hpp>
 
 #include <psp2cldr/coordinator.hpp>
-#include <psp2cldr/logger.hpp>
+#include <psp2cldr/implementation/logger.hpp>
 
 #include <cassert>
 #include <exception>

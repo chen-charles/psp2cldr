@@ -17,8 +17,8 @@
 #include <vector>
 
 #include <psp2cldr/access_proxy.hpp>
-#include <psp2cldr/arm_elfloader.hpp>
-#include <psp2cldr/logger.hpp>
+#include <psp2cldr/implementation/arm_elfloader.hpp>
+#include <psp2cldr/implementation/logger.hpp>
 #include <vita-toolchain/sce-elf.h>
 
 class VELF : public ELFLoader_Base

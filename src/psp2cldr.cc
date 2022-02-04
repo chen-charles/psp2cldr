@@ -15,11 +15,11 @@ namespace fs = std::experimental::filesystem;
 #endif
 
 #include <psp2cldr/context.hpp>
-#include <psp2cldr/coordinator_impl.hpp>
-#include <psp2cldr/load.hpp>
-#include <psp2cldr/logger.hpp>
-#include <psp2cldr/provider.hpp>
-#include <psp2cldr/velf.hpp>
+#include <psp2cldr/implementation/coordinator.hpp>
+#include <psp2cldr/implementation/load.hpp>
+#include <psp2cldr/implementation/logger.hpp>
+#include <psp2cldr/implementation/provider.hpp>
+#include <psp2cldr/implementation/velf.hpp>
 
 #include <psp2cldr/access_proxy.hpp>
 #include <string>

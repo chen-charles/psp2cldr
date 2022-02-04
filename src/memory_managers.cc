@@ -68,7 +68,7 @@ uintptr_t MemoryTranslator::translate(const uintptr_t addr) const
     throw std::runtime_error("attempted to translate an unmapped address");
 }
 
-#include <psp2cldr/logger.hpp>
+#include <psp2cldr/implementation/logger.hpp>
 uintptr_t MemoryTranslator::add(uintptr_t addr, size_t length, uintptr_t ptr)
 {
     std::lock_guard guard{m_lock};

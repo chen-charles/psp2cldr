@@ -8,10 +8,10 @@
 #include <psp2cldr/access_proxy.hpp>
 #include <psp2cldr/context.hpp>
 #include <psp2cldr/coordinator.hpp>
-#include <psp2cldr/load.hpp>
-#include <psp2cldr/logger.hpp>
-#include <psp2cldr/provider.hpp>
-#include <psp2cldr/velf.hpp>
+#include <psp2cldr/implementation/load.hpp>
+#include <psp2cldr/implementation/logger.hpp>
+#include <psp2cldr/implementation/provider.hpp>
+#include <psp2cldr/implementation/velf.hpp>
 
 #if defined(_MSC_VER) || (__GNUC__ >= 8)
 #include <filesystem>
@@ -77,17 +77,17 @@ static std::shared_ptr<ExecutionThread> init_main_thread(LoadContext &ctx, Execu
                 else
                 {
                     uint32_t instr;
-                    bool bIsMapped = false;
+                    bool is_mapped = false;
                     try
                     {
                         instr = coord.proxy().r<uint32_t>(pc);
-                        bIsMapped = true;
+                        is_mapped = true;
                     }
                     catch (...)
                     {
                     }
 
-                    if (bIsMapped)
+                    if (is_mapped)
                     {
                         LOG(CRITICAL, "unexpected SIGILL at {:#010x}, instr={:#010x}", pc, instr);
                     }
@@ -95,7 +95,7 @@ static std::shared_ptr<ExecutionThread> init_main_thread(LoadContext &ctx, Execu
                     {
                         LOG(CRITICAL, "unexpected SIGILL at {:#010x}, translation failed", pc);
                     }
-                    
+
                     intr_ctx.panic(2);
                 }
             }
@@ -369,7 +369,7 @@ int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinato
     return 0;
 }
 
-#include <psp2cldr/arm_elfloader.hpp>
+#include <psp2cldr/implementation/arm_elfloader.hpp>
 static void install_sym_stub(LoadContext &ctx, ExecutionCoordinator &coordinator, std::string sym_name, Elf32_Sym sym,
                              uint32_t ptr_f, bool in_place, unimplemented_sym_handler stub_func)
 {

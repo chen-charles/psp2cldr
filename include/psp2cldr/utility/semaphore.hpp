@@ -14,7 +14,7 @@
 #include <mutex>
 #include <thread>
 
-#include <psp2cldr/delegate.hpp>
+#include <psp2cldr/utility/delegate.hpp>
 
 class semaphore
 {

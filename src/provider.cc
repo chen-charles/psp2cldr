@@ -14,8 +14,8 @@
 #include <dlfcn.h>
 #endif
 
-#include <psp2cldr/logger.hpp>
-#include <psp2cldr/provider.hpp>
+#include <psp2cldr/implementation/logger.hpp>
+#include <psp2cldr/implementation/provider.hpp>
 
 void *Provider_DynamicallyLinkedLibrary::get_impl(const std::string &name) const
 {

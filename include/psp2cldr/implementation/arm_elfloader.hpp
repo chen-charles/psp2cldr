@@ -23,7 +23,7 @@
 #include <vector>
 
 #include <psp2cldr/access_proxy.hpp>
-#include <psp2cldr/logger.hpp>
+#include <psp2cldr/implementation/logger.hpp>
 
 // Target Platform: sizeof(uintptr_t) == sizeof(uint32_t)
 class ELFLoader_Base
