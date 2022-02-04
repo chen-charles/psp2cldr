@@ -44,11 +44,11 @@ libstdc++.so
    * Only relocation type `0` and `1` is implemented. Games tend to not use types `2` to `9`.  
 
 ## Dependencies
- * spdlog v1.x  
-   ```sh
-   git clone https://github.com/gabime/spdlog && cd spdlog && mkdir build && cd build && cmake .. && make
-   sudo make install
-   ```
+Installed automatically if not found  
+ * [spdlog v1.x](https://github.com/gabime/spdlog/tree/v1.x)  
+
+## Building
+See [Dockerfile](https://github.com/chen-charles/psp2cldr/blob/master/Dockerfile)  
 
 ## License
 MIT

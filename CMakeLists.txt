@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.13)
 
 cmake_policy(SET CMP0076 NEW)
 set(CMAKE_CXX_STANDARD 17)
@@ -25,7 +25,16 @@ set_target_properties(psp2cldr PROPERTIES
 )
 target_include_directories(psp2cldr PUBLIC include)
 
-find_package(spdlog REQUIRED)
+find_package(spdlog QUIET)
+if (NOT spdlog_FOUND)
+    Include(FetchContent)
+    FetchContent_Declare(
+        spdlog
+        GIT_REPOSITORY https://github.com/gabime/spdlog.git
+        GIT_TAG v1.9.2
+    )
+    FetchContent_MakeAvailable(spdlog)
+endif()
 target_link_libraries(psp2cldr PRIVATE spdlog::spdlog)
 
 target_link_libraries(psp2cldr PRIVATE stdc++fs)    # std::experimental::filesystem for gcc 7 and std::filesystem for gcc 8
