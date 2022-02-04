@@ -113,7 +113,7 @@ DEFINE_VITA_IMP_SYM_EXPORT(__psp2cldr__internal_tls_getvalue)
     HANDLER_RETURN(0);
 }
 
-#include <psp2cldr/implementation/provider.hpp>
+#include <psp2cldr/provider.hpp>
 #undef __psp2cldr__internal_call_nid
 DEFINE_VITA_IMP_SYM_EXPORT(__psp2cldr__internal_call_nid)
 {

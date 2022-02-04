@@ -10,8 +10,8 @@
 #include <psp2cldr/coordinator.hpp>
 #include <psp2cldr/implementation/load.hpp>
 #include <psp2cldr/implementation/logger.hpp>
-#include <psp2cldr/implementation/provider.hpp>
 #include <psp2cldr/implementation/velf.hpp>
+#include <psp2cldr/provider.hpp>
 
 #if defined(_MSC_VER) || (__GNUC__ >= 8)
 #include <filesystem>

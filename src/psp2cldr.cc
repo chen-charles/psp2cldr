@@ -18,8 +18,8 @@ namespace fs = std::experimental::filesystem;
 #include <psp2cldr/implementation/coordinator.hpp>
 #include <psp2cldr/implementation/load.hpp>
 #include <psp2cldr/implementation/logger.hpp>
-#include <psp2cldr/implementation/provider.hpp>
 #include <psp2cldr/implementation/velf.hpp>
+#include <psp2cldr/provider.hpp>
 
 #include <psp2cldr/access_proxy.hpp>
 #include <string>
