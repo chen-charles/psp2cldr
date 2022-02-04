@@ -76,7 +76,26 @@ static std::shared_ptr<ExecutionThread> init_main_thread(LoadContext &ctx, Execu
                 }
                 else
                 {
-                    LOG(CRITICAL, "unexpected SIGILL at {:#010x}, instr={:#010x}", pc, coord.proxy().r<uint32_t>(pc));
+                    uint32_t instr;
+                    bool bIsMapped = false;
+                    try
+                    {
+                        instr = coord.proxy().r<uint32_t>(pc);
+                        bIsMapped = true;
+                    }
+                    catch (...)
+                    {
+                    }
+
+                    if (bIsMapped)
+                    {
+                        LOG(CRITICAL, "unexpected SIGILL at {:#010x}, instr={:#010x}", pc, instr);
+                    }
+                    else
+                    {
+                        LOG(CRITICAL, "unexpected SIGILL at {:#010x}, translation failed", pc);
+                    }
+                    
                     intr_ctx.panic(2);
                 }
             }
