@@ -44,6 +44,8 @@ uint32_t RegisterAccessProxy_Native::r() const
     return *((unsigned long int *)(&(m_engine->m_target_ctx.uc_mcontext.arm_r0)) + reg_mapping.at(name()));
 }
 
+#define SIG_TARGETRETURN SIGUSR2
+
 void _sig_handler(int sig, siginfo_t *info, void *ucontext)
 {
     static NativeEngineARM *coord = NULL;
@@ -109,6 +111,12 @@ void _sig_handler(int sig, siginfo_t *info, void *ucontext)
     // if (exec_thread->m_handling_interrupt)
     //     raise(SIGABRT);
 
+    if (sig == SIG_TARGETRETURN)
+    {
+        *ctx = exec_thread->m_target_ctx;
+        return;
+    }
+
     exec_thread->m_handling_interrupt = true;
     exec_thread->m_target_ctx = *ctx;
     exec_thread->m_target_siginfo = *info;
@@ -142,6 +150,35 @@ struct thread_bootstrap_args
 
     ExecutionThread::THREAD_EXECUTION_RESULT start_result;
 };
+
+/**
+ * @TODO: expose VFP registers in RegisterAccessProxy
+ * m_target_ctx is in glibc's format before the signal handler is called for the first time,
+ * it follows the kernel's format afterwards, so be sure to take care of this case
+ * (when accessing vfp registers before the thread started)
+ */
+#if 0
+struct user_vfp
+{
+    unsigned long long fpregs[32];
+    unsigned long fpscr;
+};
+
+struct user_vfp_exc
+{
+    unsigned long fpexc;
+    unsigned long fpinst;
+    unsigned long fpinst2;
+};
+
+struct vfp_sigframe
+{
+    unsigned long magic;
+    unsigned long size;
+    user_vfp ufp;
+    user_vfp_exc ufp_exc;
+} __attribute__((__aligned__(8)));
+#endif
 
 void *thread_bootstrap(thread_bootstrap_args *args)
 {
@@ -210,7 +247,35 @@ void *thread_bootstrap(thread_bootstrap_args *args)
                     (*thread)[RegisterAccessProxy::Register::PC]->r());
 
                 thread->m_handling_interrupt = false;
-                setcontext(&thread->m_target_ctx); // no return, or it failed
+
+                auto cpsr = (*thread)[RegisterAccessProxy::Register::CPSR];
+                if ((*thread)[RegisterAccessProxy::Register::PC]->r() & 1)
+                    cpsr->w(cpsr->r() | (1 << 5));
+                else
+                    cpsr->w(cpsr->r() & (~(1 << 5)));
+
+                /**
+                 * setcontext to ucp "being passed as an argument to a signal handler" is unspecified behavior
+                 * since SUSv2, https://pubs.opengroup.org/onlinepubs/007908799/xsh/getcontext.html
+                 *
+                 * This is unfortunately what happened here:
+                 * setcontext is not expecting the same format as what the signal handler gave to us,
+                 * leading to VFP registers trashed unintentionally
+                 * https://sourceware.org/git/?p=glibc.git;a=commit;f=sysdeps/unix/sysv/linux/arm/setcontext.S;h=6dcf80c78273c5e0bdcacaf64a9b34fd930b405f
+                 *
+                 * The kernel sets up uc_regspace with MAGIC and STORAGE_SIZE instead,
+                 * https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=12c3dca25d2fa17a101de0d80bf3f238b1cecbae
+                 * https://github.com/torvalds/linux/blob/1f2cfdd349b7647f438c1e552dc1b983da86d830/arch/arm/include/asm/ucontext.h#L34
+                 */
+                // setcontext(&thread->m_target_ctx); // no return, or it failed
+
+                // how do we pthread_kill synchronously / or wait for signal completion (that doesn't return to us?)?
+                // https://pubs.opengroup.org/onlinepubs/9699919799.2018edition/
+                // it feels like signaling a signal to the calling thread should be synchronous though,
+                // but since it's not guaranteed in the standard, let's just loop to death here...
+                pthread_kill(thread->pthread_id(), SIG_TARGETRETURN);
+                while (1)
+                    pthread_yield();
 
                 result = ExecutionThread::THREAD_EXECUTION_RESULT::STOP_ERRORED;
             }
@@ -509,17 +574,25 @@ NativeEngineARM::NativeEngineARM() : ExecutionCoordinator()
                 {
                     if (sigaction(SIGINT, &action, &m_old_action_int) == 0)
                     {
-                        union sigval sig_v;
-                        sig_v.sival_ptr = this;
-                        if (sigqueue(getpid(), SIGILL, sig_v) == 0)
+                        if (sigaction(SIG_TARGETRETURN, &action, &m_old_action_targetreturn) == 0)
                         {
-                            // setup complete
-                            return;
+                            union sigval sig_v;
+                            sig_v.sival_ptr = this;
+                            if (sigqueue(getpid(), SIGILL, sig_v) == 0)
+                            {
+                                // setup complete
+                                return;
+                            }
+                            else
+                            {
+                                LOG(CRITICAL, "sigqueue failed with error: {}", strerror(errno));
+                            }
                         }
                         else
                         {
-                            LOG(CRITICAL, "sigqueue failed with error: {}", strerror(errno));
+                            LOG(CRITICAL, "sigaction for SIG_TARGETRETURN failed with error: {}", strerror(errno));
                         }
+                        sigaction(SIGINT, &m_old_action_int, NULL);
                     }
                     else
                     {
@@ -555,5 +628,6 @@ NativeEngineARM::~NativeEngineARM()
 {
     sigaction(SIGILL, &m_old_action_ill, NULL);
     sigaction(SIGSEGV, &m_old_action_segv, NULL);
+    sigaction(SIG_TARGETRETURN, &m_old_action_targetreturn, NULL);
     sigaltstack(&m_old_ss, NULL);
 }

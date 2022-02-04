@@ -72,6 +72,7 @@ class InterruptContext;
 class NativeEngineARM;
 void _sig_handler(int sig, siginfo_t *info, void *ucontext);
 void *thread_bootstrap(struct thread_bootstrap_args *args);
+
 class ExecutionThread_Native : public ExecutionThread
 {
   public:
@@ -194,6 +195,7 @@ class NativeEngineARM : public ExecutionCoordinator
     struct sigaction m_old_action_ill;
     struct sigaction m_old_action_segv;
     struct sigaction m_old_action_int;
+    struct sigaction m_old_action_targetreturn;
     stack_t m_old_ss;
     char m_sigstack[SIGSTKSZ] __attribute__((aligned(16)));
 };
