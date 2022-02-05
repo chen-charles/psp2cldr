@@ -411,6 +411,8 @@ void *thread_bootstrap(thread_bootstrap_args *args)
     ExecutionThread_Native *thread = args->thread;
     ExecutionThread::THREAD_EXECUTION_RESULT result = ExecutionThread::THREAD_EXECUTION_RESULT::START_FAILED;
 
+    thread->m_thread_is_valid = true;
+
     stack_t ss;
     ss.ss_size = thread->m_szsigstack;
     ss.ss_flags = 0;
@@ -516,8 +518,6 @@ ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Native::start(uint32_t 
             _execute_recover_until_point(until, m_until_point_instr_backup, m_coord.proxy());
             throw std::runtime_error("pthread_create failed");
         }
-
-        m_thread_is_valid = true;
     }
 
     args.barrier.acquire();
