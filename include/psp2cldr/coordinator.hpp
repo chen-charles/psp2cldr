@@ -130,7 +130,7 @@ class ExecutionThread
     }
 
   public:
-    enum class THREAD_EXECUTION_STATE
+    enum class THREAD_EXECUTION_STATE : uint32_t
     {
         UNSTARTED,
         RUNNING,
@@ -140,7 +140,7 @@ class ExecutionThread
     // thread is not accessible when it's running
     // we can attempt to wait for the thread to become inspect-able
 
-    enum class THREAD_EXECUTION_RESULT
+    enum class THREAD_EXECUTION_RESULT : uint32_t
     {
         OK,
         START_FAILED,
@@ -160,6 +160,11 @@ class ExecutionThread
 
     virtual void register_interrupt_callback(
         std::function<void(ExecutionCoordinator &, ExecutionThread &, uint32_t)> callback) = 0;
+
+    virtual bool is_thumb() const
+    {
+        return (*this)[RegisterAccessProxy::Register::CPSR]->r() & (1 << 5);
+    }
 
   public:
     TLS tls;

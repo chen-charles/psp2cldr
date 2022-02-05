@@ -42,35 +42,42 @@ public:
     }
 };
 
+/**
+ * RegisterAccessProxy
+ *
+ * $PC
+ * R: should always return LSB-clear value
+ * W: should automatically set CPSR.T if LSB-set
+ */
 class RegisterAccessProxy
 {
 public:
-    enum class Register
-    {
-        INVALID,
-        R0,
-        R1,
-        R2,
-        R3,
-        R4,
-        R5,
-        R6,
-        R7,
-        R8,
-        R9,
-        R10,
-        R11, // FP
-        R12, // IP
-        R13, // SP
-        R14, // LR
-        R15, // PC
-        CPSR,
+  enum Register
+  {
+      INVALID,
+      R0,
+      R1,
+      R2,
+      R3,
+      R4,
+      R5,
+      R6,
+      R7,
+      R8,
+      R9,
+      R10,
+      R11, // FP
+      R12, // IP
+      R13, // SP
+      R14, // LR
+      R15, // PC
+      CPSR,
 
-        FP = R11,
-        IP = R12,
-        SP = R13,
-        LR = R14,
-        PC = R15,
+      FP = R11,
+      IP = R12,
+      SP = R13,
+      LR = R14,
+      PC = R15,
     };
 
     RegisterAccessProxy(Register name) : m_name(name)

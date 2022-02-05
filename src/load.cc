@@ -38,11 +38,12 @@ static std::shared_ptr<ExecutionThread> init_main_thread(LoadContext &ctx, Execu
         coordinator.register_interrupt_callback([&ctx](ExecutionCoordinator &coord, ExecutionThread &thread,
                                                        uint32_t intno) {
             InterruptContext intr_ctx(coord, thread, ctx);
+
             auto pc = thread[RegisterAccessProxy::Register::PC]->r();
+            pc += thread.is_thumb() ? 1 : 0;
+
             if (intno == POSIX_SIGILL)
             {
-                if (thread[RegisterAccessProxy::Register::CPSR]->r() & (1 << 5))
-                    pc |= 1;
                 bool entry_exists = false;
                 import_stub_entry entry;
                 {
@@ -80,7 +81,7 @@ static std::shared_ptr<ExecutionThread> init_main_thread(LoadContext &ctx, Execu
                     bool is_mapped = false;
                     try
                     {
-                        instr = coord.proxy().r<uint32_t>(pc);
+                        instr = coord.proxy().r<uint32_t>(CLEARBIT(pc, 0));
                         is_mapped = true;
                     }
                     catch (...)
@@ -101,6 +102,7 @@ static std::shared_ptr<ExecutionThread> init_main_thread(LoadContext &ctx, Execu
             }
             else
             {
+                LOG(CRITICAL, "unexpected signal {} at {:#010x}", intno, pc);
                 intr_ctx.panic(3);
             }
         });
@@ -137,9 +139,18 @@ static int call_from_main_thread(std::vector<uintptr_t> init_routines, LoadConte
         (*thread)[RegisterAccessProxy::Register::R0]->w(0);
 
         uint32_t result;
-        if (thread->start(la, lr) != ExecutionThread::THREAD_EXECUTION_RESULT::OK ||
-            (*thread).join(&result) != ExecutionThread::THREAD_EXECUTION_RESULT::STOP_UNTIL_POINT_HIT)
+        if (thread->start(la, lr) != ExecutionThread::THREAD_EXECUTION_RESULT::OK)
+        {
+            LOG(WARN, "init_routine start failed");
             break;
+        }
+        ExecutionThread::THREAD_EXECUTION_RESULT exec_result = thread->join(&result);
+        if (exec_result != ExecutionThread::THREAD_EXECUTION_RESULT::STOP_UNTIL_POINT_HIT)
+        {
+            LOG(WARN, "init_routine failed, exec_result={}", (uint32_t)exec_result);
+            break;
+        }
+
         if (sp != (*thread)[RegisterAccessProxy::Register::SP]->r())
         {
             LOG(WARN, "thread stack corruption detected");
@@ -168,8 +179,8 @@ static void install_nid_stub(LoadContext &ctx, MemoryAccessProxy &proxy, uint32_
         stub_location = proxy.r<uint32_t>(ptr_f);
     }
 
-    if (stub_location & 1) // thumb
-        proxy.copy_in(stub_location & (~1), &INSTR_UDF0_THM, sizeof(INSTR_UDF0_THM));
+    if (TESTBIT(stub_location, 0)) // thumb
+        proxy.copy_in(CLEARBIT(stub_location, 0), &INSTR_UDF0_THM, sizeof(INSTR_UDF0_THM));
     else
         proxy.copy_in(stub_location, &INSTR_UDF0_ARM, sizeof(INSTR_UDF0_ARM));
 
@@ -283,17 +294,17 @@ int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinato
                 }
                 else
                 {
-                    if (f_stub & 1) // thumb
+                    if (TESTBIT(f_stub, 0)) // thumb
                     {
-                        char thm_ldr_and_bx_r12[]{"\xdf\xf8\x04\xc0\x60\x47\x00\xbf\x00\x00\x00\x00"};
-                        *(uint32_t *)(thm_ldr_and_bx_r12 + 8) = loc;
-                        proxy.copy_in(f_stub & (~1), thm_ldr_and_bx_r12, sizeof(thm_ldr_and_bx_r12) - 1);
+                        char thm_ldr_and_blx_r12[]{"\xdf\xf8\x04\xc0\xe0\x47\x00\xbf\x00\x00\x00\x00"};
+                        *(uint32_t *)(thm_ldr_and_blx_r12 + 8) = loc;
+                        proxy.copy_in(CLEARBIT(f_stub, 0), thm_ldr_and_blx_r12, sizeof(thm_ldr_and_blx_r12) - 1);
                     }
                     else
                     {
-                        char arm_ldr_and_bx_r12[]{"\x00\xc0\x9f\xe5\x1c\xff\x2f\xe1\x00\x00\x00\x00"};
-                        *(uint32_t *)(arm_ldr_and_bx_r12 + 8) = loc;
-                        proxy.copy_in(f_stub, arm_ldr_and_bx_r12, sizeof(arm_ldr_and_bx_r12) - 1);
+                        char arm_ldr_and_blx_r12[]{"\x00\xc0\x9f\xe5\x3c\xff\x2f\xe1\x00\x00\x00\x00"};
+                        *(uint32_t *)(arm_ldr_and_blx_r12 + 8) = loc;
+                        proxy.copy_in(f_stub, arm_ldr_and_blx_r12, sizeof(arm_ldr_and_blx_r12) - 1);
                     }
                 }
             }
@@ -389,8 +400,8 @@ static void install_sym_stub(LoadContext &ctx, ExecutionCoordinator &coordinator
         stub_location = ptr_f;
     }
 
-    if (stub_location & 1)
-        proxy.w<uint32_t>(stub_location & (~1), INSTR_UDF0_THM);
+    if (TESTBIT(stub_location, 0))
+        proxy.w<uint32_t>(CLEARBIT(stub_location, 0), INSTR_UDF0_THM);
     else
         proxy.w<uint32_t>(stub_location, INSTR_UDF0_ARM);
 
@@ -619,7 +630,7 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
         static const char *MAGIC_thread_fini = "__psp2cldr_fini_";
         if (exp_name.rfind(MAGIC_thread_init, 0) == 0)
         {
-            ctx.thread_init_routines.push_back(ptr_f);
+            ctx.thread_init_routines.push_back(std::make_pair(ptr_f, exp_name));
             if (call_from_main_thread({ptr_f}, ctx, coordinator) != 1)
             {
                 LOG(ERROR, "module load failed because {} failed", exp_name);
@@ -627,7 +638,7 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
             }
         }
         else if (exp_name.rfind(MAGIC_thread_fini, 0) == 0)
-            ctx.thread_fini_routines.push_back(ptr_f);
+            ctx.thread_fini_routines.push_back(std::make_pair(ptr_f, exp_name));
 
         ctx.libs_export_locations[exp_name] = std::make_pair(sym, ptr_f);
     }

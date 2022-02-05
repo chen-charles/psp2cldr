@@ -55,10 +55,15 @@ class RegisterAccessProxy_Native : public RegisterAccessProxy
     }
 
     static inline const std::unordered_map<Register, int> reg_mapping{
-        {Register::R0, 0},   {Register::R1, 1},    {Register::R2, 2},   {Register::R3, 3},   {Register::R4, 4},
-        {Register::R5, 5},   {Register::R6, 6},    {Register::R7, 7},   {Register::R8, 8},   {Register::R9, 9},
-        {Register::R10, 10}, {Register::R11, 11},  {Register::R12, 12}, {Register::R13, 13}, {Register::R14, 14},
-        {Register::R15, 15}, {Register::CPSR, 16},
+        {Register::R0, offsetof(struct sigcontext, arm_r0)},     {Register::R1, offsetof(struct sigcontext, arm_r1)},
+        {Register::R2, offsetof(struct sigcontext, arm_r2)},     {Register::R3, offsetof(struct sigcontext, arm_r3)},
+        {Register::R4, offsetof(struct sigcontext, arm_r4)},     {Register::R5, offsetof(struct sigcontext, arm_r5)},
+        {Register::R6, offsetof(struct sigcontext, arm_r6)},     {Register::R7, offsetof(struct sigcontext, arm_r7)},
+        {Register::R8, offsetof(struct sigcontext, arm_r8)},     {Register::R9, offsetof(struct sigcontext, arm_r9)},
+        {Register::R10, offsetof(struct sigcontext, arm_r10)},   {Register::R11, offsetof(struct sigcontext, arm_fp)},
+        {Register::R12, offsetof(struct sigcontext, arm_ip)},    {Register::R13, offsetof(struct sigcontext, arm_sp)},
+        {Register::R14, offsetof(struct sigcontext, arm_lr)},    {Register::R15, offsetof(struct sigcontext, arm_pc)},
+        {Register::CPSR, offsetof(struct sigcontext, arm_cpsr)},
     };
 
     virtual uint32_t w(uint32_t value);
@@ -70,16 +75,12 @@ class RegisterAccessProxy_Native : public RegisterAccessProxy
 
 class InterruptContext;
 class NativeEngineARM;
-void _sig_handler(int sig, siginfo_t *info, void *ucontext);
-void *thread_bootstrap(struct thread_bootstrap_args *args);
 
 class ExecutionThread_Native : public ExecutionThread
 {
   public:
     ExecutionThread_Native(ExecutionCoordinator &coordinator);
-    virtual ~ExecutionThread_Native()
-    {
-    }
+    virtual ~ExecutionThread_Native();
 
     virtual void register_interrupt_callback(
         std::function<void(ExecutionCoordinator &, ExecutionThread &, uint32_t)> callback)
@@ -113,7 +114,7 @@ class ExecutionThread_Native : public ExecutionThread
         return std::make_shared<const RegisterAccessProxy_Native>(name, this);
     }
 
-  protected:
+  public:
     ExecutionCoordinator &m_coord;
 
     std::function<void(ExecutionCoordinator &, ExecutionThread &, uint32_t)> m_intr_callback = {};
@@ -138,13 +139,8 @@ class ExecutionThread_Native : public ExecutionThread
     siginfo_t m_target_siginfo;
 
     stack_t m_old_ss;
-    char m_sigstack[SIGSTKSZ] __attribute__((aligned(16)));
-
-    // friends: m_target_ctx should only be modified by const types
-    friend class NativeMemoryAccessProxy;
-    friend class RegisterAccessProxy_Native;
-    friend void _sig_handler(int sig, siginfo_t *info, void *ucontext);
-    friend void *thread_bootstrap(struct thread_bootstrap_args *args);
+    char *m_sigstack = nullptr;
+    size_t m_szsigstack = 4 * SIGSTKSZ;
 };
 static_assert(std::atomic<bool>::is_always_lock_free);
 static_assert(std::atomic<uint32_t>::is_always_lock_free);
@@ -195,9 +191,11 @@ class NativeEngineARM : public ExecutionCoordinator
     struct sigaction m_old_action_ill;
     struct sigaction m_old_action_segv;
     struct sigaction m_old_action_int;
+    struct sigaction m_old_action_targetinit;
     struct sigaction m_old_action_targetreturn;
     stack_t m_old_ss;
-    char m_sigstack[SIGSTKSZ] __attribute__((aligned(16)));
+    char *m_sigstack = nullptr;
+    size_t m_szsigstack = 4 * SIGSTKSZ;
 };
 
 #define Coordinator_Impl NativeEngineARM

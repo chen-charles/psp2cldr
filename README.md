@@ -7,15 +7,15 @@ Loading *userspace* PSP2 VELFs.
 **psp2cldr** runs directly on arm32v7-linux  
 ### via QEMU System Emulation
 `virt` platform with `smp=4` and `4G` memory  
-   * `ubuntu:bionic` now has `cmake` from [Kitware APT Repository](https://apt.kitware.com/) too.  
-   * `ubuntu:focal` upgraded from `bionic` `netboot` installation on `virt` platform with `smp=4` and `4G` memory.  
-      * make sure `/boot` has `1G`, otherwise the upgrade would fail.  
 
-### via Docker
+### via [QEMU User Mode Emulation (qemu-linux-user)](User.Dockerfile)  
+`arm-none-linux-gnueabihf`  
+
+### via [Docker](Dockerfile)  
 `glibc` is required.  
-Noticed a memory leak, but it doesn't reproduce on full system emulation. Verified with `heaptrack`/`jemalloc` and `psp2cldr`'s `mmap` calls, seems it isn't caused by `psp2cldr`. Would be a good verification platform to work with, but be aware of this potential leakage.  
-#### `arm32v7/fedora:33`  
-   * Recommended, comes with a working CMake, GCC 10.  
+~~Noticed a memory leak, but it doesn't reproduce on full system emulation. Verified with `heaptrack`/`jemalloc` and `psp2cldr`'s `mmap` calls, seems it isn't caused by `psp2cldr`. Would be a good verification platform to work with, but be aware of this potential leakage.~~ (it was actually an undefined behavior due to an ABI non-compliance, fixed)  
+#### `arm32v7/fedora:33`, `arm32v7/fedora:34`, `arm32v7/fedora:35`  
+   * Recommended, comes with a working CMake, GCC 10/11.  
 #### `arm32v7/ubuntu:focal`
    * CMake 3.16 has a [bug](https://gitlab.kitware.com/cmake/cmake/-/issues/20568) that renders it unusable on armhf, you can either cross-compile ([GNU Toolchain for the A-profile Architecture](https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain/gnu-a/downloads)), build CMake 3.18+ from source, or use the [Kitware APT Repository](https://apt.kitware.com/) (*had no luck though).  
 
@@ -23,6 +23,11 @@ Noticed a memory leak, but it doesn't reproduce on full system emulation. Verifi
    1. Displaying information of the supplied VELF  
    `psp2cldr --readelf XXX.velf`
    2. Load VELF (see usage via `psp2cldr -h`)  
+
+## Routine Providers
+See [Guide](sample_implementations/README.md)  
+See [Sample](sample_implementations/dynamic/impl.cc)  
+See [psp2cldr Newlib OS Support Reference Implementation](https://github.com/chen-charles/psp2cldr-NewlibOSL)  
 
 ## Supplementary ELFs
 **psp2cldr** provides a mechanism to load supplementary ELFs into the address space of the target. `DT_NEEDED` tag is respected.  
@@ -48,7 +53,7 @@ Installed automatically if not found
  * [spdlog v1.x](https://github.com/gabime/spdlog/tree/v1.x)  
 
 ## Building
-See [Dockerfile](https://github.com/chen-charles/psp2cldr/blob/master/Dockerfile)  
+See [Dockerfile](Dockerfile)  
 
 ## License
 MIT

@@ -134,18 +134,18 @@ std::shared_ptr<HandlerResult> InterruptContext::install_forward_handler(std::st
     {
         auto loc = load.libs_export_locations[target].second;
         auto pc = thread[RegisterAccessProxy::Register::PC]->r() & (~1);
-        bool isThumb = thread[RegisterAccessProxy::Register::CPSR]->r() & (1 << 5);
+        bool isThumb = thread.is_thumb();
         if (isThumb)
         {
-            char thm_ldr_and_bx_r12[]{"\xdf\xf8\x04\xc0\x60\x47\x00\xbf\x00\x00\x00\x00"};
-            *(uint32_t *)(thm_ldr_and_bx_r12 + 8) = loc;
-            proxy.copy_in(pc, thm_ldr_and_bx_r12, sizeof(thm_ldr_and_bx_r12) - 1);
+            char thm_ldr_and_blx_r12[]{"\xdf\xf8\x04\xc0\xe0\x47\x00\xbf\x00\x00\x00\x00"};
+            *(uint32_t *)(thm_ldr_and_blx_r12 + 8) = loc;
+            proxy.copy_in(pc, thm_ldr_and_blx_r12, sizeof(thm_ldr_and_blx_r12) - 1);
         }
         else
         {
-            char arm_ldr_and_bx_r12[]{"\x00\xc0\x9f\xe5\x1c\xff\x2f\xe1\x00\x00\x00\x00"};
-            *(uint32_t *)(arm_ldr_and_bx_r12 + 8) = loc;
-            proxy.copy_in(pc, arm_ldr_and_bx_r12, sizeof(arm_ldr_and_bx_r12) - 1);
+            char arm_ldr_and_blx_r12[]{"\x00\xc0\x9f\xe5\x3c\xff\x2f\xe1\x00\x00\x00\x00"};
+            *(uint32_t *)(arm_ldr_and_blx_r12 + 8) = loc;
+            proxy.copy_in(pc, arm_ldr_and_blx_r12, sizeof(arm_ldr_and_blx_r12) - 1);
         }
 
         thread[RegisterAccessProxy::Register::PC]->w(loc);

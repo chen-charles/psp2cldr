@@ -12,7 +12,6 @@
 
 #include <psp2cldr/implementation/logger.hpp>
 #include <psp2cldr/implementation/native.hpp>
-
 #include <psp2cldr/utility/semaphore.hpp>
 
 pthread_key_t thread_obj_key;
@@ -34,31 +33,114 @@ void *NativeMemoryAccessProxy::copy_out(void *dest, uint64_t src, size_t num) co
 
 uint32_t RegisterAccessProxy_Native::w(uint32_t value)
 {
-    *((unsigned long int *)(&(m_engine->m_target_ctx.uc_mcontext.arm_r0)) + reg_mapping.at(name())) =
+    // https://lists.gnu.org/archive/html/qemu-devel/2021-04/msg02211.html
+    if (name() == Register::PC)
+    {
+        if (TESTBIT(value, 0))
+        {
+            clearbit(&value, 0);
+            setbit(&m_engine->m_target_ctx.uc_mcontext.arm_cpsr, 5);
+        }
+        else
+        {
+            clearbit(&m_engine->m_target_ctx.uc_mcontext.arm_cpsr, 5);
+        }
+    }
+
+    *(unsigned long *)((char *)(&(m_engine->m_target_ctx.uc_mcontext)) + reg_mapping.at(name())) =
         value; // implementation specific, assuming glibc
     return value;
 }
 
 uint32_t RegisterAccessProxy_Native::r() const
 {
-    return *((unsigned long int *)(&(m_engine->m_target_ctx.uc_mcontext.arm_r0)) + reg_mapping.at(name()));
+    const uint32_t value = *(unsigned long *)((char *)(&(m_engine->m_target_ctx.uc_mcontext)) + reg_mapping.at(name()));
+    if (name() == Register::PC)
+    {
+        return CLEARBIT(value, 0);
+    }
+    return value;
 }
 
+#define SIG_TARGETINIT SIGUSR1
 #define SIG_TARGETRETURN SIGUSR2
+
+void target_return_handler(int sig, siginfo_t *info, void *ucontext)
+{
+    auto ctx = reinterpret_cast<ucontext_t *>(ucontext);
+
+    ExecutionThread_Native *exec_thread = nullptr;
+
+    if (info->si_code == SI_QUEUE)
+    {
+        exec_thread = static_cast<ExecutionThread_Native *>(info->si_value.sival_ptr);
+    }
+
+    assert(exec_thread);
+
+    ExecutionThread_Native *tls_thread = static_cast<ExecutionThread_Native *>(pthread_getspecific(thread_obj_key));
+    assert(exec_thread == tls_thread);
+
+    if (!exec_thread->m_started)
+    {
+        assert(false);
+        return;
+    }
+
+    assert(exec_thread->m_target_ctx.uc_regspace[0] != 0);
+    *ctx = exec_thread->m_target_ctx;
+
+    // Jazelle, see DDI0406C A.2.5.1
+    if (TESTBIT(ctx->uc_mcontext.arm_cpsr, 24))
+    {
+        clearbit(&ctx->uc_mcontext.arm_cpsr, 24);
+    }
+    assert(!TESTBIT(ctx->uc_mcontext.arm_pc, 0));
+
+    // LOG(TRACE, "signal({}): target resuming execution at {:#010x}, cpsr.T={}", exec_thread->tid(),
+    //     ctx->uc_mcontext.arm_pc, TESTBIT(ctx->uc_mcontext.arm_cpsr, 5) ? 1 : 0);
+}
+
+void target_init_handler(int sig, siginfo_t *info, void *ucontext)
+{
+    auto ctx = reinterpret_cast<ucontext_t *>(ucontext);
+
+    ExecutionThread_Native *exec_thread = nullptr;
+
+    if (info->si_code == SI_QUEUE)
+    {
+        exec_thread = static_cast<ExecutionThread_Native *>(info->si_value.sival_ptr);
+    }
+
+    assert(exec_thread);
+
+    clearbit(&ctx->uc_mcontext.arm_pc, 0);
+    exec_thread->m_target_ctx = *ctx;
+}
 
 void _sig_handler(int sig, siginfo_t *info, void *ucontext)
 {
+    assert(sig == SIGILL);
+    assert(sig == info->si_signo);
+
+    auto ctx = reinterpret_cast<ucontext_t *>(ucontext);
+
+    ExecutionThread_Native *exec_thread = nullptr;
+
     static NativeEngineARM *coord = NULL;
     bool is_stop = false;
     if (info->si_code == SI_QUEUE)
     {
+        assert(sig == SIGILL);
         if (info->si_value.sival_ptr != NULL)
         {
             coord = reinterpret_cast<NativeEngineARM *>(info->si_value.sival_ptr);
             return;
         }
         else
+        {
             is_stop = true;
+        }
     }
 
     if (!coord)
@@ -67,11 +149,13 @@ void _sig_handler(int sig, siginfo_t *info, void *ucontext)
         raise(SIGTRAP);
     }
 
-    auto ctx = reinterpret_cast<ucontext_t *>(ucontext);
-
     // https://www.gnu.org/software/libc/manual/html_node/Thread_002dspecific-Data.html
-    ExecutionThread_Native *exec_thread =
-        reinterpret_cast<ExecutionThread_Native *>(pthread_getspecific(thread_obj_key));
+
+    if (!exec_thread)
+    {
+        exec_thread = static_cast<ExecutionThread_Native *>(pthread_getspecific(thread_obj_key));
+    }
+
     if (!exec_thread)
     {
         if (is_stop) // the thread is already dead, ignore the stop request
@@ -106,17 +190,46 @@ void _sig_handler(int sig, siginfo_t *info, void *ucontext)
     }
 
     if (!exec_thread->m_started)
-        return;
-
-    // if (exec_thread->m_handling_interrupt)
-    //     raise(SIGABRT);
-
-    if (sig == SIG_TARGETRETURN)
     {
-        *ctx = exec_thread->m_target_ctx;
-        return;
+        LOG(CRITICAL, "signal({}): thread has not started", exec_thread->tid());
+        assert(false);
+        _exit(1);
     }
 
+    if (exec_thread->m_handling_interrupt)
+    {
+        LOG(CRITICAL, "signal({}): thread is already handling_interrupt!!!", exec_thread->tid());
+        LOG(CRITICAL, "signal({}): si_signo={} pc={} si_addr={} si_code={}", exec_thread->tid(), sig,
+            ctx->uc_mcontext.arm_pc, info->si_addr, (uint32_t)(info->si_code));
+        switch (sig)
+        {
+        case SIGSEGV:
+            if (coord->m_old_action_segv.sa_flags & SA_SIGINFO)
+                (coord->m_old_action_segv.sa_sigaction)(sig, info, ucontext);
+            else
+                (coord->m_old_action_segv.sa_handler)(sig);
+            return;
+        case SIGILL:
+            if (coord->m_old_action_ill.sa_flags & SA_SIGINFO)
+                (coord->m_old_action_ill.sa_sigaction)(sig, info, ucontext);
+            else
+                (coord->m_old_action_ill.sa_handler)(sig);
+            return;
+        default:
+            throw std::logic_error("unexpected signal");
+        }
+    }
+
+    if (ctx->uc_stack.ss_sp != exec_thread->m_sigstack)
+    {
+        LOG(CRITICAL, "signal({}): uc_stack::ss_sp={:#010x} sigstack={:#010x}", exec_thread->tid(),
+            (uintptr_t)ctx->uc_stack.ss_sp, (uintptr_t)exec_thread->m_sigstack);
+    }
+
+    assert(ctx->uc_stack.ss_sp == exec_thread->m_sigstack);
+    assert(ctx->uc_stack.ss_size == exec_thread->m_szsigstack);
+
+    clearbit(&ctx->uc_mcontext.arm_pc, 0);
     exec_thread->m_handling_interrupt = true;
     exec_thread->m_target_ctx = *ctx;
     exec_thread->m_target_siginfo = *info;
@@ -126,9 +239,9 @@ void _sig_handler(int sig, siginfo_t *info, void *ucontext)
 
 static inline void _execute_recover_until_point(uintptr_t until, uint32_t backup, MemoryAccessProxy &proxy)
 {
-    if (until & 1) // thumb
+    if (TESTBIT(until, 0)) // thumb
     {
-        proxy.copy_in(until & (~1), &backup, 2);
+        proxy.copy_in(CLEARBIT(until, 0), &backup, 2);
     }
     else
     {
@@ -138,8 +251,22 @@ static inline void _execute_recover_until_point(uintptr_t until, uint32_t backup
 
 ExecutionThread_Native::ExecutionThread_Native(ExecutionCoordinator &coord) : m_coord(coord)
 {
-    if (getcontext(&m_target_ctx) != 0)
-        throw std::runtime_error("getcontext failed");
+    m_sigstack = (char *)std::aligned_alloc(16, m_szsigstack);
+    assert(m_sigstack);
+
+    // cannot use thread_obj_key here, we could be nested inside provider function
+    // which will overwrite the callers provider key
+    union sigval sig_v;
+    sig_v.sival_ptr = this;
+    if (pthread_sigqueue(pthread_self(), SIG_TARGETINIT, sig_v) != 0)
+        throw std::runtime_error("ExecutionThread_Native initialization failed");
+}
+
+ExecutionThread_Native::~ExecutionThread_Native()
+{
+    assert(!m_started);
+    assert(!m_thread_is_valid);
+    free(m_sigstack);
 }
 
 struct thread_bootstrap_args
@@ -152,10 +279,7 @@ struct thread_bootstrap_args
 };
 
 /**
- * @TODO: expose VFP registers in RegisterAccessProxy
- * m_target_ctx is in glibc's format before the signal handler is called for the first time,
- * it follows the kernel's format afterwards, so be sure to take care of this case
- * (when accessing vfp registers before the thread started)
+ * @TODO: expose VFP registers from RegisterAccessProxy
  */
 #if 0
 struct user_vfp
@@ -180,41 +304,12 @@ struct vfp_sigframe
 } __attribute__((__aligned__(8)));
 #endif
 
-void *thread_bootstrap(thread_bootstrap_args *args)
+void thread_handle_signal()
 {
-    ExecutionThread_Native *thread = args->thread;
-
-    pthread_setspecific(thread_obj_key, thread);
-
-    ExecutionThread::THREAD_EXECUTION_RESULT result = ExecutionThread::THREAD_EXECUTION_RESULT::START_FAILED;
-
-    stack_t ss;
-    ss.ss_size = SIGSTKSZ;
-    ss.ss_flags = 0;
-    ss.ss_sp = (void *)thread->m_sigstack;
-    if (sigaltstack(&ss, &thread->m_old_ss) != 0)
-        throw std::runtime_error("unrecoverable failure: sigaltstack");
-
-    LOG(TRACE, "tid={}, native tid={}", thread->tid(), (uintptr_t)syscall(SYS_gettid));
-    if (sigsetjmp(thread->m_return_ctx, 1) == 0)
-    {
-        if (!thread->m_started)
-        {
-            LOG(TRACE, "execute({}): ready to start", thread->tid());
-            thread->m_started = true;
-            args->start_result = ExecutionThread::THREAD_EXECUTION_RESULT::OK;
-            args->barrier.release();
-            args = nullptr;
-
-            setcontext(&thread->m_target_ctx); // no return, or it failed
-            LOG(CRITICAL, "setcontext failed with error: {}", strerror(errno));
-        }
-
-        // TODO: this might be recoverable, any use-cases?
-        throw std::runtime_error("unrecoverable failure: sigsetjmp/setcontext");
-    }
-
-    // args could be allocated on stack, and therefore should not be accessed anymore
+    ExecutionThread_Native *thread = static_cast<ExecutionThread_Native *>(pthread_getspecific(thread_obj_key));
+    ExecutionThread::THREAD_EXECUTION_RESULT result = ExecutionThread::THREAD_EXECUTION_RESULT::OK;
+    auto pc = (*thread)[RegisterAccessProxy::Register::PC]->r();
+    pc += thread->is_thumb() ? 1 : 0;
 
     if (thread->m_stop_called)
     {
@@ -222,9 +317,11 @@ void *thread_bootstrap(thread_bootstrap_args *args)
         goto _done;
     }
 
-    if (thread->m_target_ctx.uc_mcontext.arm_pc != thread->m_target_until_point)
+    if (pc != thread->m_target_until_point)
     {
-        LOG(TRACE, "execute({}): handling interrupt si_signo={:#x}", thread->tid(), thread->m_target_siginfo.si_signo);
+        LOG(TRACE, "execute({}): handling interrupt si_signo={:#x} pc={:#010x} si_addr={:#010x} si_code={}",
+            thread->tid(), thread->m_target_siginfo.si_signo, pc, (uint32_t)thread->m_target_siginfo.si_addr,
+            (uint32_t)thread->m_target_siginfo.si_code);
         if (thread->m_target_siginfo.si_signo == SIGILL || thread->m_target_siginfo.si_signo == SIGSEGV ||
             thread->m_target_siginfo.si_signo == SIGINT || SIGINT_queued)
         {
@@ -234,7 +331,11 @@ void *thread_bootstrap(thread_bootstrap_args *args)
                 thread->m_intr_callback(thread->m_coord, *thread, SIGINT);
                 SIGINT_queued = false;
             }
+
             thread->m_intr_callback(thread->m_coord, *thread, thread->m_target_siginfo.si_signo);
+
+            // make sure we don't accidentally change thread_obj_key in a nested scenario
+            assert(pthread_getspecific(thread_obj_key) == thread);
 
             if (thread->m_stop_called)
             {
@@ -246,13 +347,8 @@ void *thread_bootstrap(thread_bootstrap_args *args)
                 LOG(TRACE, "execute({}): interrupt handling complete, resuming execution at {:#010x}", thread->tid(),
                     (*thread)[RegisterAccessProxy::Register::PC]->r());
 
+                assert(thread->m_thread_is_valid);
                 thread->m_handling_interrupt = false;
-
-                auto cpsr = (*thread)[RegisterAccessProxy::Register::CPSR];
-                if ((*thread)[RegisterAccessProxy::Register::PC]->r() & 1)
-                    cpsr->w(cpsr->r() | (1 << 5));
-                else
-                    cpsr->w(cpsr->r() & (~(1 << 5)));
 
                 /**
                  * setcontext to ucp "being passed as an argument to a signal handler" is unspecified behavior
@@ -269,14 +365,14 @@ void *thread_bootstrap(thread_bootstrap_args *args)
                  */
                 // setcontext(&thread->m_target_ctx); // no return, or it failed
 
-                // how do we pthread_kill synchronously / or wait for signal completion (that doesn't return to us?)?
-                // https://pubs.opengroup.org/onlinepubs/9699919799.2018edition/
-                // it feels like signaling a signal to the calling thread should be synchronous though,
-                // but since it's not guaranteed in the standard, let's just loop to death here...
-                pthread_kill(thread->pthread_id(), SIG_TARGETRETURN);
-                while (1)
-                    pthread_yield();
-
+                union sigval sig_v;
+                sig_v.sival_ptr = thread;
+                std::atomic_signal_fence(std::memory_order_seq_cst);
+                assert(pthread_getspecific(thread_obj_key) == thread);
+                assert(pthread_equal(pthread_self(), thread->pthread_id()));
+                const int rr = pthread_sigqueue(thread->pthread_id(), SIG_TARGETRETURN, sig_v);
+                LOG(CRITICAL, "execute({}): pthread_sigqueue returned at an expected location: rr={}", thread->tid(),
+                    rr);
                 result = ExecutionThread::THREAD_EXECUTION_RESULT::STOP_ERRORED;
             }
         }
@@ -305,7 +401,72 @@ _done:
     thread->m_handling_interrupt = false;
     thread->m_started = false;
 
-    return NULL;
+    LOG(TRACE, "execute({}, {}): thread exit", thread->tid(), (uintptr_t)syscall(SYS_gettid));
+
+    pthread_exit(nullptr);
+}
+
+void *thread_bootstrap(thread_bootstrap_args *args)
+{
+    ExecutionThread_Native *thread = args->thread;
+    ExecutionThread::THREAD_EXECUTION_RESULT result = ExecutionThread::THREAD_EXECUTION_RESULT::START_FAILED;
+
+    stack_t ss;
+    ss.ss_size = thread->m_szsigstack;
+    ss.ss_flags = 0;
+    ss.ss_sp = (void *)thread->m_sigstack;
+    if (sigaltstack(&ss, &thread->m_old_ss) != 0)
+        throw std::runtime_error("unrecoverable failure: sigaltstack");
+
+    {
+        /**
+         * the linux kernel calls the signal handler with the actual kernel context frame's ucontext structure
+         * thus, if we attempt to restore to target_ctx acquired outside of this thread, we would effectively corrupt
+         * that structure, and since sigaltstack information is stored there, the call to change signal stack from this
+         * thread will have no effects.
+         * 
+         * let's acquire a copy of ucontext_t from this thread directly and reapply the interested fields from the dummy we setup outside
+         */
+        union sigval sig_v;
+        sig_v.sival_ptr = thread;
+        ucontext_t m_target_ctx_copy = thread->m_target_ctx;
+        if (pthread_sigqueue(thread->pthread_id(), SIG_TARGETINIT, sig_v) == 0)
+        {
+            thread->m_target_ctx.uc_mcontext = m_target_ctx_copy.uc_mcontext;
+        }
+    }
+
+    auto systid = (uintptr_t)syscall(SYS_gettid);
+    LOG(TRACE, "tid={}, native tid={}", thread->tid(), systid);
+    if (sigsetjmp(thread->m_return_ctx, 1) == 0)
+    {
+        pthread_setspecific(thread_obj_key, thread);
+
+        if (!thread->m_started)
+        {
+            LOG(TRACE, "execute({}): ready to start", thread->tid());
+            thread->m_started = true;
+            args->start_result = ExecutionThread::THREAD_EXECUTION_RESULT::OK;
+            args->barrier.release();
+            args = nullptr;
+
+            union sigval sig_v;
+            sig_v.sival_ptr = thread;
+            std::atomic_signal_fence(std::memory_order_seq_cst);
+            assert(pthread_getspecific(thread_obj_key) == thread);
+            assert(pthread_equal(pthread_self(), thread->pthread_id()));
+            const int rr = pthread_sigqueue(thread->pthread_id(), SIG_TARGETRETURN, sig_v);
+            LOG(CRITICAL, "execute({}): pthread_sigqueue returned at an expected location: rr={}", thread->tid(), rr);
+        }
+
+        // TODO: this might be recoverable, any use-cases?
+        throw std::runtime_error("unrecoverable failure: sigsetjmp/pthread_sigqueue");
+    }
+
+    asm volatile("" : : : "memory");
+
+    thread_handle_signal();
+    pthread_exit(nullptr);
 }
 
 ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Native::start(uint32_t from, uint32_t until)
@@ -322,25 +483,21 @@ ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Native::start(uint32_t 
     join(nullptr);
 
     (*this)[RegisterAccessProxy::Register::PC]->w(from);
-
-    auto cpsr = (*this)[RegisterAccessProxy::Register::CPSR];
-    if (from & 1)
-        cpsr->w(cpsr->r() | (1 << 5));
-    else
-        cpsr->w(cpsr->r() & (~(1 << 5)));
+    assert(TESTBIT(from, 0) ? is_thumb() : 1);
+    assert((*this)[RegisterAccessProxy::Register::PC]->r() == CLEARBIT(from, 0));
 
     static const uint32_t INSTR_UDF0_ARM = 0xe7f000f0;
     static const uint16_t INSTR_UDF0_THM = 0xde00;
 
-    if (until & 1) // thumb
+    if (TESTBIT(until, 0)) // thumb
     {
-        m_until_point_instr_backup = m_coord.proxy().r<uint16_t>(until & (~1));
-        m_coord.proxy().w<uint16_t>(until & (~1), INSTR_UDF0_THM);
+        m_until_point_instr_backup = m_coord.proxy().r<uint16_t>(CLEARBIT(until, 0));
+        m_coord.proxy().w<uint16_t>(CLEARBIT(until, 0), INSTR_UDF0_THM);
     }
     else
     {
-        m_until_point_instr_backup = m_coord.proxy().r<uint32_t>(until & (~1));
-        m_coord.proxy().w<uint32_t>(until & (~1), INSTR_UDF0_ARM);
+        m_until_point_instr_backup = m_coord.proxy().r<uint32_t>(CLEARBIT(until, 0));
+        m_coord.proxy().w<uint32_t>(CLEARBIT(until, 0), INSTR_UDF0_ARM);
     }
 
     m_target_until_point = until;
@@ -352,6 +509,7 @@ ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Native::start(uint32_t 
         std::lock_guard guard{m_thread_lock};
 
         m_state = THREAD_EXECUTION_STATE::RUNNING;
+        m_result = THREAD_EXECUTION_RESULT::OK;
 
         if (pthread_create(&m_thread, NULL, (void *(*)(void *))thread_bootstrap, &args) != 0)
         {
@@ -554,63 +712,76 @@ void NativeEngineARM::panic(int code, LoadContext *load)
     }
 }
 
+static bool _install_sigaction(int sig, void (*f)(int, siginfo_t *, void *), bool mask_emptyset = false,
+                               struct sigaction *old_action = NULL)
+{
+    struct sigaction action;
+    if (mask_emptyset)
+        sigemptyset(&action.sa_mask);
+    else
+        sigfillset(&action.sa_mask);
+
+    action.sa_sigaction = f;
+    action.sa_flags = SA_SIGINFO | SA_ONSTACK;
+    if (sigaction(sig, &action, old_action) == 0)
+    {
+        return true;
+    }
+    LOG(CRITICAL, "sigaction for {} failed with error: {}", sig, strerror(errno));
+    return false;
+}
+
+static bool _uninstall_sigaction(int sig, struct sigaction *old_action)
+{
+    if (sigaction(sig, old_action, NULL) == 0)
+    {
+        return true;
+    }
+    return false;
+}
+
 NativeEngineARM::NativeEngineARM() : ExecutionCoordinator()
 {
+    m_sigstack = (char *)std::aligned_alloc(16, m_szsigstack);
     if (pthread_key_create(&thread_obj_key, NULL) == 0)
     {
         stack_t ss;
-        ss.ss_size = SIGSTKSZ;
+        ss.ss_size = m_szsigstack;
         ss.ss_flags = 0;
         ss.ss_sp = (void *)m_sigstack;
         if (sigaltstack(&ss, &m_old_ss) == 0)
         {
-            struct sigaction action;
-            sigfillset(&action.sa_mask);
-            action.sa_sigaction = _sig_handler;
-            action.sa_flags = SA_SIGINFO | SA_ONSTACK;
-            if (sigaction(SIGILL, &action, &m_old_action_ill) == 0)
+            LOG(TRACE, "sigaltstack: sigstack={:#010x}", (uintptr_t)m_sigstack);
+
+            if (_install_sigaction(SIGILL, _sig_handler, false, &m_old_action_ill))
             {
-                if (sigaction(SIGSEGV, &action, &m_old_action_segv) == 0)
+                if (_install_sigaction(SIG_TARGETRETURN, target_return_handler, true, &m_old_action_targetreturn))
                 {
-                    if (sigaction(SIGINT, &action, &m_old_action_int) == 0)
+                    if (_install_sigaction(SIG_TARGETINIT, target_init_handler, true, &m_old_action_targetinit))
                     {
-                        if (sigaction(SIG_TARGETRETURN, &action, &m_old_action_targetreturn) == 0)
+                        union sigval sig_v;
+                        sig_v.sival_ptr = this;
+                        if (pthread_sigqueue(pthread_self(), SIGILL, sig_v) == 0)
                         {
-                            union sigval sig_v;
-                            sig_v.sival_ptr = this;
-                            if (sigqueue(getpid(), SIGILL, sig_v) == 0)
-                            {
-                                // setup complete
-                                return;
-                            }
-                            else
-                            {
-                                LOG(CRITICAL, "sigqueue failed with error: {}", strerror(errno));
-                            }
+                            // setup complete
+                            return;
                         }
                         else
                         {
-                            LOG(CRITICAL, "sigaction for SIG_TARGETRETURN failed with error: {}", strerror(errno));
+                            LOG(CRITICAL, "sigqueue failed with error: {}", strerror(errno));
                         }
-                        sigaction(SIGINT, &m_old_action_int, NULL);
                     }
                     else
                     {
-                        LOG(CRITICAL, "sigaction for SIGINT failed with error: {}", strerror(errno));
+                        _uninstall_sigaction(SIG_TARGETRETURN, &m_old_action_targetreturn);
+                        _uninstall_sigaction(SIGILL, &m_old_action_ill);
                     }
-                    sigaction(SIGSEGV, &m_old_action_segv, NULL);
                 }
                 else
                 {
-                    LOG(CRITICAL, "sigaction for SIGSEGV failed with error: {}", strerror(errno));
+                    _uninstall_sigaction(SIGILL, &m_old_action_ill);
                 }
-                sigaction(SIGILL, &m_old_action_ill, NULL);
             }
-            else
-            {
-                LOG(CRITICAL, "sigaction for SIGILL failed with error: {}", strerror(errno));
-            }
-            sigaltstack(&m_old_ss, NULL);
         }
         else
         {
@@ -626,8 +797,9 @@ NativeEngineARM::NativeEngineARM() : ExecutionCoordinator()
 
 NativeEngineARM::~NativeEngineARM()
 {
-    sigaction(SIGILL, &m_old_action_ill, NULL);
-    sigaction(SIGSEGV, &m_old_action_segv, NULL);
-    sigaction(SIG_TARGETRETURN, &m_old_action_targetreturn, NULL);
+    _uninstall_sigaction(SIG_TARGETRETURN, &m_old_action_targetreturn);
+    _uninstall_sigaction(SIG_TARGETINIT, &m_old_action_targetinit);
+    _uninstall_sigaction(SIGILL, &m_old_action_ill);
     sigaltstack(&m_old_ss, NULL);
+    free(m_sigstack);
 }

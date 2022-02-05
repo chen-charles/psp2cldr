@@ -1,4 +1,4 @@
-FROM arm32v7/fedora:34
+FROM arm32v7/fedora:35
 
 RUN dnf check-update; exit 0
 RUN dnf install -y cmake gcc gcc-c++ spdlog-devel
@@ -10,6 +10,6 @@ RUN ln -s /usr/bin/armv7hl-redhat-linux-gnueabi-pkg-config /usr/bin/armv7hnl-red
 
 RUN cd /src
 RUN cmake -S /src -B /src/build
-RUN cmake --build /src/build --parallel $(nproc)
-RUN cmake --build /src/build --parallel $(nproc) --target install
-RUN cmake --build /src/build --parallel $(nproc) --target clean
+RUN cmake --build /src/build --parallel $(nproc) --config Debug
+RUN cmake --build /src/build --parallel $(nproc) --target install --config Debug
+RUN cmake --build /src/build --parallel $(nproc) --target clean --config Debug
