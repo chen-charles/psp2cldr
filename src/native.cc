@@ -412,6 +412,7 @@ void *thread_bootstrap(thread_bootstrap_args *args)
     ExecutionThread::THREAD_EXECUTION_RESULT result = ExecutionThread::THREAD_EXECUTION_RESULT::START_FAILED;
 
     thread->m_thread_is_valid = true;
+    thread->m_thread_lock.release();
 
     stack_t ss;
     ss.ss_size = thread->m_szsigstack;
@@ -508,7 +509,7 @@ ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Native::start(uint32_t 
     args.thread = this;
     args.start_result = THREAD_EXECUTION_RESULT::START_FAILED;
     {
-        std::lock_guard guard{m_thread_lock};
+        m_thread_lock.acquire();
 
         m_state = THREAD_EXECUTION_STATE::RUNNING;
         m_result = THREAD_EXECUTION_RESULT::OK;
@@ -534,17 +535,11 @@ ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Native::join(uint32_t *
         int err = 0;
 
         // https://udrepper.livejournal.com/16844.html
-        bool is_valid;
         {
-            std::lock_guard guard{m_thread_lock};
-            is_valid = m_thread_is_valid;
-        }
-
-        if (is_valid)
-        {
-            err = pthread_join(m_thread, &thread_retval);
+            semaphore_guard guard{m_thread_lock};
+            if (m_thread_is_valid)
             {
-                std::lock_guard guard{m_thread_lock};
+                err = pthread_join(m_thread, &thread_retval);
                 m_thread_is_valid = false;
             }
         }
@@ -564,7 +559,7 @@ void ExecutionThread_Native::stop(uint32_t retval)
 {
     m_stop_called = true;
     {
-        std::lock_guard guard{m_thread_lock};
+        semaphore_guard guard{m_thread_lock};
         if (m_thread_is_valid)
         {
             if (!pthread_equal(m_thread, pthread_self()))

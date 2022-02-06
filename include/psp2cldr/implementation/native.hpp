@@ -22,6 +22,7 @@
 #include <psp2cldr/arch.h>
 #include <psp2cldr/coordinator.hpp>
 #include <psp2cldr/memory_managers.hpp>
+#include <psp2cldr/utility/semaphore.hpp>
 
 class NativeEngineARM;
 class NativeMemoryAccessProxy : public MemoryAccessProxy
@@ -119,7 +120,7 @@ class ExecutionThread_Native : public ExecutionThread
 
     std::function<void(ExecutionCoordinator &, ExecutionThread &, uint32_t)> m_intr_callback = {};
 
-    std::mutex m_thread_lock;
+    semaphore m_thread_lock{1};
     bool m_thread_is_valid{false};
     pthread_t m_thread;
     std::atomic<bool> m_stoppable{false};
