@@ -26,4 +26,4 @@ RUN ln -s /workspaces ${SYSROOT}/workspaces
 # Debugger: arm-none-linux-gnueabihf-gdb
 RUN echo "set auto-load safe-path /" >> /root/.gdbinit
 
-# qemu-arm -g 45678 -L $SYSROOT ./build/psp2cldr --syslst vita-sys/sys.lst undertale.velf build/impls/libNewlibOSL.so -v
+# qemu-arm -g 45678 -L $SYSROOT ./build/psp2cldr ...
