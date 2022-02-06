@@ -4,7 +4,7 @@ psp2cldr - PSP2 Custom Loader
 Loading *userspace* PSP2 VELFs.  
 
 ## Native
-**psp2cldr** runs directly on arm32v7-linux  
+**psp2cldr** runs directly on arm32v7-linux (with `glibc`)  
 ### via QEMU System Emulation
 `virt` platform with `smp=4` and `4G` memory  
 
@@ -12,7 +12,6 @@ Loading *userspace* PSP2 VELFs.
 `arm-none-linux-gnueabihf`  
 
 ### via [Docker](Dockerfile)  
-`glibc` is required.  
 ~~Noticed a memory leak, but it doesn't reproduce on full system emulation. Verified with `heaptrack`/`jemalloc` and `psp2cldr`'s `mmap` calls, seems it isn't caused by `psp2cldr`. Would be a good verification platform to work with, but be aware of this potential leakage.~~ (it was actually an undefined behavior due to an ABI non-compliance, fixed)  
 #### `arm32v7/fedora:33`, `arm32v7/fedora:34`, `arm32v7/fedora:35`  
    * Recommended, comes with a working CMake, GCC 10/11.  
@@ -22,7 +21,7 @@ Loading *userspace* PSP2 VELFs.
 ## Usage
    1. Displaying information of the supplied VELF  
    `psp2cldr --readelf XXX.velf`
-   2. Load VELF (see usage via `psp2cldr -h`)  
+   2. Load ELFs, and optionally VELFs (see usage via `psp2cldr -h`)  
 
 ## Routine Providers
 See [Guide](sample_implementations/README.md)  

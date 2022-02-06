@@ -129,8 +129,10 @@ class Provider_Pool : public Provider
             return m_nid_cache[hash].lock()->get(libraryNID, functionNID);
         }
 
-        for (auto &provider : m_providers)
+        for (auto it = m_providers.rbegin(); it != m_providers.rend(); it++)
         {
+            const auto &provider = *it;
+
             auto f = provider->get(libraryNID, functionNID);
             if (f)
             {
@@ -148,8 +150,10 @@ class Provider_Pool : public Provider
             return m_sym_cache[name].lock()->get(name);
         }
 
-        for (auto &provider : m_providers)
+        for (auto it = m_providers.rbegin(); it != m_providers.rend(); it++)
         {
+            const auto &provider = *it;
+
             auto f = provider->get(name);
             if (f)
             {

@@ -213,9 +213,9 @@ int load_velf(const std::string &filename, LoadContext &ctx, ExecutionCoordinato
                 if (ctx.nid_to_filename.count(libraryNID) != 0)
                 {
                     fs::path nid_filename = ctx.nid_to_filename.at(libraryNID);
-                    for (auto &search_path : ctx.search_paths)
+                    for (auto &prefix : ctx.sys_prefixes)
                     {
-                        fs::path library_path = search_path / nid_filename;
+                        fs::path library_path = prefix / nid_filename;
                         if (fs::exists(library_path))
                         {
                             if (load_velf(fs::absolute(library_path).string(), ctx, coordinator) != 0)
@@ -429,9 +429,9 @@ int load_elf(const std::string &filename, LoadContext &ctx, ExecutionCoordinator
         else
         {
             fs::path lib = libname;
-            for (auto &search_path : ctx.search_paths)
+            for (auto &prefix : ctx.sys_prefixes)
             {
-                fs::path library_path = search_path / lib;
+                fs::path library_path = prefix / lib;
                 if (fs::exists(library_path))
                 {
                     if (load_elf(fs::absolute(library_path).string(), ctx, coordinator) != 0)

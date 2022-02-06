@@ -218,11 +218,10 @@ class LoadContext
     }
 
   public:
-    // ELF/VELF dependency search paths
-    std::vector<std::string> search_paths;
+    // --sysprefix, search paths
+    std::vector<std::string> sys_prefixes;
 
-    // velf fullname provided to psp2cldr, kept for provider's reference
-    std::string main_velf_fullname;
+    std::unordered_map<std::string, std::string> additional_options;
 
     std::unordered_map<NID_t, std::string> nid_to_filename;
 

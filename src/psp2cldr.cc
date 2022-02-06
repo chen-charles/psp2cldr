@@ -32,22 +32,40 @@ int main(int argc, char *argv[])
 
     if (argc <= 1 || strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0)
     {
+        // clang-format off
         const char usage_str[]{"\
-usage: psp2cldr --readelf <filename> \n\
-usage: psp2cldr <options> <filename> ...<nid_implementation_libraries> \n\
+usage: psp2cldr --readelf <velf> \n\
+usage: psp2cldr [<options>] [--begin <additional options> --end] [<nid implementation library>...] \n\
 \n\
-options: \n\
-    -v[vvvv]: more verbose logging \n\
+<options>: \n\
+    unless otherwise stated, options can be specified multiple times, and will be applied in order. \n\
+\n\
+    -v[v]: more verbose logging (in debug builds only) \n\
+\n\
     --sys <target so>: specify a shared library or a directory of shared libraries to be loaded into the target environment \n\
-    --syslst <target so list file>: specify a list of <target so> files to be loaded into the target environment \n\
-    --libpath <dependency search path>: specify the search path of DT_NEEDED and other import libraries \n\
+    --syslst <target so list file>: specify a list of <target so>s to be loaded into the target environment \n\
+    --sysprefix <path>: specify the pathing prefix to <target so>s, if not specified, default to getcwd() \n\
+        applied in reverse \n\
 \n\
-each of <nid_implementation_libraries> is one of the followings: \n\
+    --velf <velf>: specify a VELF to load, VELFs will be loaded after ALL <target so>s \n\
+\n\
+    --querydll <dll>: see <nid implementation library> \n\
+\n\
+<additional options>: \n\
+    <nid implementation library>s may accept additional options. psp2cldr will not interpret them in any way. \n\
+    Additional options cannot be repeated. The last observance supersedes earlier ones. \n\
+    All additional options should be in the form of '<KEY> <VALUE>', where <KEY> starts with '--'. \n\
+    See their manuals for more details. \n\
+\n\
+<nid implementation library> is one of the followings: \n\
     1. <dll>: a DLL \n\
-    2. --querydll <dll>: a DLL using Query interface \n\
+    2. --querydll <dll> from <options>: a DLL using the Query interface \n\
     3. <directory>: a directory of <dll>, searched recursively \n\
-order of supplying <nid_implementation_libraries> matters, the first observance of an implementation will override the next one.\n\
+\n\
+    order of supplying <nid implementation library> matters, the last observance of an implementation will supersede the earlier ones. \n\
 "};
+        // clang-format on
+
         console->info(usage_str);
         if (argc <= 1)
             return 1;
@@ -108,135 +126,135 @@ order of supplying <nid_implementation_libraries> matters, the first observance 
     }
 
     auto pool = std::make_shared<Provider_Pool>();
+
+    Coordinator_Impl coord;
+    LoadContext ctx_load(pool);
+
     int delta_verbosity = 0;
-    bool velf_path_set = false;
-    fs::path velf_path;
-    std::vector<std::string> target_libraries;
-    std::vector<std::string> search_paths;
+    std::vector<std::string> sys_libraries;
+    std::vector<fs::path> sys_prefixes;
+    std::vector<fs::path> velfs;
+    bool is_in_additional_options = false;
+    std::unordered_map<std::string, std::string> &additional_options = ctx_load.additional_options;
+
     for (int i = 1; i < argc; i++)
     {
-        if (argv[i][0] == '-') // argv[i][0] == 0 if the string is empty
+        const std::string arg{argv[i]};
+
+        if (is_in_additional_options)
         {
-            if (strcmp(argv[i], "--querydll") == 0)
+            if (arg.compare("--end") == 0)
             {
-                if (i != argc - 1)
-                {
-                    pool->add_provider(
-                        std::make_shared<Provider_DynamicallyLinkedLibrary_Query>(fs::absolute(argv[++i]).string()));
-                }
+                is_in_additional_options = false;
                 continue;
             }
+            additional_options[arg] = argv[++i];
+            LOG(INFO, "Additional Option {}={}", arg, additional_options[arg]);
+            continue;
+        }
 
-            if (strcmp(argv[i], "--libpath") == 0)
+        if (arg.rfind("-v", 0) == 0)
+        {
+            int v_count = 0;
+            for (int j = 1;; j++)
             {
-                auto libpath = fs::absolute(argv[++i]);
-                if (fs::is_directory(libpath))
-                    search_paths.push_back(libpath.string());
+                if (argv[i][j] == 0)
+                    break;
+                if (argv[i][j] == 'v')
+                    v_count++;
                 else
-                    LOG(WARN, "ignored --libpath {} because it is not a directory", libpath.string());
-                continue;
+                {
+                    v_count = 0;
+                    break;
+                }
             }
-
-            if (strcmp(argv[i], "--sys") == 0)
+            if (v_count != 0)
             {
-                fs::path arg = fs::absolute(argv[++i]);
-                if (!fs::exists(arg))
+                delta_verbosity += v_count;
+            }
+        }
+        else if (arg.rfind("--", 0) == 0)
+        {
+            if (arg.compare("--querydll") == 0)
+            {
+                pool->add_provider(
+                    std::make_shared<Provider_DynamicallyLinkedLibrary_Query>(fs::absolute(argv[++i]).string()));
+            }
+            else if (arg.compare("--sysprefix") == 0)
+            {
+                auto path = fs::absolute(argv[++i]);
+                if (fs::is_directory(path))
+                    sys_prefixes.push_back(std::move(path));
+                else
+                    LOG(WARN, "sysprefix {} ignored because it is not a directory", path.string());
+            }
+            else if (arg.compare("--sys") == 0)
+            {
+                sys_libraries.push_back(argv[++i]);
+            }
+            else if (arg.compare("--syslst") == 0)
+            {
+                fs::path arg_path = fs::absolute(argv[++i]);
+                if (!fs::exists(arg_path))
                 {
                     throw std::invalid_argument("path does not exist");
                 }
-                LOG(INFO, "Target Library at {}", arg.string());
-                target_libraries.push_back(arg.string());
-                continue;
-            }
-
-            if (strcmp(argv[i], "--syslst") == 0)
-            {
-                fs::path arg = fs::absolute(argv[++i]);
-                if (!fs::exists(arg))
-                {
-                    throw std::invalid_argument("path does not exist");
-                }
-                std::ifstream lst(arg);
+                std::ifstream lst(arg_path);
                 if (lst.is_open())
                 {
                     std::string line;
                     while (std::getline(lst, line))
                     {
-                        fs::path filename = fs::absolute(line);
-                        if (!fs::exists(filename))
+                        if (line.size() && line.rfind("#", 0) != 0)
                         {
-                            throw std::invalid_argument("path does not exist");
+                            sys_libraries.push_back(line);
                         }
-                        LOG(INFO, "Target Library at {}", filename.string());
-                        target_libraries.push_back(filename.string());
                     }
                     lst.close();
                 }
                 else
                 {
-                    LOG(WARN, "specified sys list file {} does not exist", arg.string());
+                    LOG(WARN, "specified sys list file {} does not exist", arg);
                 }
-                continue;
             }
-            if (strncmp(argv[i], "-v", 2) == 0)
+            else if (arg.compare("--velf") == 0)
             {
-                int v_count = 0;
-                for (int j = 1;; j++)
-                {
-                    if (argv[i][j] == 0)
-                        break;
-                    if (argv[i][j] == 'v')
-                        v_count++;
-                    else
-                    {
-                        v_count = 0;
-                        break;
-                    }
-                }
-                if (v_count != 0)
-                {
-                    delta_verbosity += v_count;
-                    continue;
-                }
-                // else, parse failed
+                velfs.push_back(fs::absolute(argv[++i]));
             }
-            LOG(WARN, "unrecognized option: {}", argv[i]);
-        }
-
-        fs::path arg = fs::absolute(argv[i]);
-        if (!fs::exists(arg))
-        {
-            throw std::invalid_argument("path does not exist");
-        }
-
-        if (!velf_path_set)
-        {
-            velf_path_set = true;
-            velf_path = arg;
-            continue;
-        }
-
-        if (fs::is_directory(arg))
-        {
-            for (auto &p : fs::recursive_directory_iterator(arg))
+            else if (arg.compare("--begin") == 0)
             {
-                auto pp = fs::absolute(p.path());
-                if (fs::is_regular_file(pp))
-                {
-                    LOG(INFO, "Provider DLL at {}", pp.string());
-                    pool->add_provider(std::make_shared<Provider_DynamicallyLinkedLibrary>(pp.string()));
-                }
+                is_in_additional_options = true;
             }
-        }
-        else if (fs::is_regular_file(arg))
-        {
-            LOG(INFO, "Provider DLL at {}", arg.string());
-            pool->add_provider(std::make_shared<Provider_DynamicallyLinkedLibrary>(arg.string()));
+            else
+            {
+                LOG(WARN, "unrecognized option {}", arg);
+            }
         }
         else
         {
-            LOG(WARN, "{} is not a regular file/folder, treated as a file", argv[i]);
-            pool->add_provider(std::make_shared<Provider_DynamicallyLinkedLibrary>(arg.string()));
+            fs::path arg_path = fs::absolute(arg);
+            if (fs::is_directory(arg_path))
+            {
+                for (auto &p : fs::recursive_directory_iterator(arg_path))
+                {
+                    auto pp = fs::absolute(p.path());
+                    if (fs::is_regular_file(pp))
+                    {
+                        LOG(INFO, "Provider DLL at {}", pp.string());
+                        pool->add_provider(std::make_shared<Provider_DynamicallyLinkedLibrary>(pp.string()));
+                    }
+                }
+            }
+            else if (fs::is_regular_file(arg_path))
+            {
+                LOG(INFO, "Provider DLL at {}", arg_path.string());
+                pool->add_provider(std::make_shared<Provider_DynamicallyLinkedLibrary>(arg_path.string()));
+            }
+            else
+            {
+                LOG(WARN, "{} is not a regular file/folder, treated as a file", arg_path.string());
+                pool->add_provider(std::make_shared<Provider_DynamicallyLinkedLibrary>(arg_path.string()));
+            }
         }
     }
     pool->add_provider(std::make_shared<Provider_StaticallyLinkedLibrary>());
@@ -303,18 +321,61 @@ order of supplying <nid_implementation_libraries> matters, the first observance 
         }
     }
 
-    Coordinator_Impl coord;
-    LoadContext ctx_load(pool);
-    ctx_load.main_velf_fullname = velf_path.string();
-    ctx_load.search_paths = search_paths;
+    if (sys_prefixes.size() == 0)
+    {
+        sys_prefixes.push_back(fs::current_path());
+    }
 
-    bool succ = true;
-    for (auto &name : target_libraries)
-        if (!(succ = (load_elf(name, ctx_load, coord) == 0)))
-            break;
+    for (auto it = sys_prefixes.rbegin(); it != sys_prefixes.rend(); it++)
+    {
+        const auto &prefix = *it;
 
-    if (succ)
-        load_velf(velf_path.string(), ctx_load, coord);
+        ctx_load.sys_prefixes.push_back(prefix.string());
+        LOG(INFO, "sysprefix at {}", prefix.string());
+    }
+
+    for (const auto &lib : sys_libraries)
+    {
+        bool found = false;
+        for (auto it = sys_prefixes.rbegin(); it != sys_prefixes.rend(); it++)
+        {
+            const auto &prefix = *it;
+
+            auto resolved = prefix / lib;
+            if (fs::exists(resolved))
+            {
+                auto filename = resolved.string();
+                LOG(INFO, "Target Library at {}", filename);
+                if (load_elf(filename, ctx_load, coord) != 0)
+                {
+                    LOG(CRITICAL, "{} load_elf failed", filename);
+                    return 1;
+                }
+                found = true;
+                break;
+            }
+        }
+
+        if (!found)
+        {
+            LOG(WARN, "{} does not exist", lib);
+        }
+    }
+
+    for (const auto &velf : velfs)
+    {
+        if (fs::exists(velf))
+        {
+            LOG(INFO, "VELF at {}", velf.string());
+            if (load_velf(velf.string(), ctx_load, coord) != 0)
+            {
+                LOG(CRITICAL, "{} load_velf failed", velf.string());
+                return 2;
+            }
+            continue;
+        }
+        LOG(WARN, "{} does not exist", velf.string());
+    }
 
     return 0;
 }
