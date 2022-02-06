@@ -10,6 +10,9 @@ Loading *userspace* PSP2 VELFs.
 
 ### via [QEMU User Mode Emulation (qemu-linux-user)](User.Dockerfile)  
 `arm-none-linux-gnueabihf`  
+Make sure to use a **recent** release of `qemu-arm`.  (for the record, `qemu-arm version 2.11.1` is not one of them).  
+Tested with `qemu-arm version 6.1.0 (qemu-6.1.0-10.fc35)`.  
+A devcontainer has also been setup to utilize `vscode`'s gdb debugger. Avoid placing breakpoints around `void thread_handle_signal()` as `gdb` doesn't know about the magic we are doing.  
 
 ### via [Docker](Dockerfile)  
 ~~Noticed a memory leak, but it doesn't reproduce on full system emulation. Verified with `heaptrack`/`jemalloc` and `psp2cldr`'s `mmap` calls, seems it isn't caused by `psp2cldr`. Would be a good verification platform to work with, but be aware of this potential leakage.~~ (it was actually an undefined behavior due to an ABI non-compliance, fixed)  
@@ -45,7 +48,7 @@ libstdc++.so
    
 ## Known Limitations
    * Only `e_type == ET_SCE_RELEXEC` is supported, partly because in native mode we cannot enforce the binary to be loaded at an exact location.  
-   * Only relocation type `0` and `1` is implemented. Games tend to not use types `2` to `9`.  
+   * Only relocation type `0` and `1` are implemented. User VELFs tend to not use types `2` to `9`.  
 
 ## Dependencies
 Installed automatically if not found  
