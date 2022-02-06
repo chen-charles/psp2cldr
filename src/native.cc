@@ -753,7 +753,7 @@ NativeEngineARM::NativeEngineARM() : ExecutionCoordinator()
         {
             LOG(TRACE, "sigaltstack: sigstack={:#010x}", (uintptr_t)m_sigstack);
 
-            if (_install_sigaction(SIGILL, _sig_handler, true, &m_old_action_ill))
+            if (_install_sigaction(SIGILL, _sig_handler, false, &m_old_action_ill))
             {
                 if (_install_sigaction(SIG_TARGETRETURN, target_return_handler, true, &m_old_action_targetreturn))
                 {
