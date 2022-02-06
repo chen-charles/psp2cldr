@@ -39,9 +39,14 @@ target_link_libraries(psp2cldr PRIVATE spdlog::spdlog)
 
 target_link_libraries(psp2cldr PRIVATE stdc++fs)    # std::experimental::filesystem for gcc 7 and std::filesystem for gcc 8
 
+set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
+set(THREADS_PREFER_PTHREAD_FLAG TRUE)
+find_package(Threads REQUIRED)
+target_link_libraries(psp2cldr PRIVATE Threads::Threads)
+
 include(CheckSymbolExists)
 list(APPEND CMAKE_REQUIRED_DEFINITIONS -D_GNU_SOURCE)   # pthread_sigqueue etc.
-list(APPEND CMAKE_REQUIRED_LIBRARIES ${CMAKE_DL_LIBS})
+list(APPEND CMAKE_REQUIRED_LIBRARIES ${CMAKE_DL_LIBS} Threads::Threads)
 check_symbol_exists(dlmopen "dlfcn.h" HAVE_DLMOPEN)
 
 target_link_libraries(psp2cldr PRIVATE ${CMAKE_DL_LIBS})
@@ -52,22 +57,22 @@ execute_process(COMMAND ${CMAKE_C_COMPILER} -dM -E -
 string(FIND ${PSP2CLDR_MACROS} "__ARM_ARCH_7A__" FIND_ARMv7A_RET)
 if (${FIND_ARMv7A_RET} GREATER "0")
     string(FIND ${PSP2CLDR_MACROS} "__ARM_PCS_VFP" FIND_ARMPCSVFP_RET)
-    check_symbol_exists(setcontext "ucontext.h" HAVE_SETCONTEXT)
-    check_symbol_exists(getcontext "ucontext.h" HAVE_GETCONTEXT)
+    check_symbol_exists(pthread_sigqueue "signal.h;pthread.h" HAVE_PTHREAD_SIGQUEUE)
     check_symbol_exists(sigqueue "signal.h" HAVE_SIGQUEUE)
     check_symbol_exists(sigaction "signal.h" HAVE_SIGACTION)
+    check_symbol_exists(sigaltstack "signal.h" HAVE_SIGALTSTACK)
 
-    if("${HAVE_SETCONTEXT}" AND "${HAVE_GETCONTEXT}" AND "${HAVE_SIGQUEUE}" AND "${HAVE_SIGQUEUE}" AND ${FIND_ARMPCSVFP_RET} GREATER "0")
+    if("${HAVE_PTHREAD_SIGQUEUE}" AND "${HAVE_SIGQUEUE}" AND "${HAVE_SIGQUEUE}" AND "${HAVE_SIGALTSTACK}" AND ${FIND_ARMPCSVFP_RET} GREATER "0")
         message(STATUS "Using PSP2CLDR_NATIVE")
         add_compile_definitions(PSP2CLDR_NATIVE=1)
         add_compile_options(-fstack-protector-strong)
         target_sources(psp2cldr PRIVATE "include/psp2cldr/implementation/native.hpp" "src/native.cc")
 
     else()
-        unset(HAVE_SETCONTEXT CACHE)
-        unset(HAVE_GETCONTEXT CACHE)
+        unset(HAVE_PTHREAD_SIGQUEUE CACHE)
         unset(HAVE_SIGQUEUE CACHE)
         unset(HAVE_SIGACTION CACHE)
+        unset(HAVE_SIGALTSTACK CACHE)
         message(FATAL_ERROR "PSP2CLDR_NATIVE requirement unsatisfied")
     endif() 
 endif()
