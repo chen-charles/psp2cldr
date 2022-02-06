@@ -193,7 +193,7 @@ void _sig_handler(int sig, siginfo_t *info, void *ucontext)
     {
         LOG(CRITICAL, "signal({}): thread has not started", exec_thread->tid());
         assert(false);
-        _exit(1);
+        _exit(0xc);
     }
 
     if (exec_thread->m_handling_interrupt)
@@ -222,8 +222,8 @@ void _sig_handler(int sig, siginfo_t *info, void *ucontext)
 
     if (ctx->uc_stack.ss_sp != exec_thread->m_sigstack)
     {
-        LOG(CRITICAL, "signal({}): uc_stack::ss_sp={:#010x} sigstack={:#010x}", exec_thread->tid(),
-            (uintptr_t)ctx->uc_stack.ss_sp, (uintptr_t)exec_thread->m_sigstack);
+        assert(false);
+        _exit(0xf);
     }
 
     assert(ctx->uc_stack.ss_sp == exec_thread->m_sigstack);
@@ -753,7 +753,7 @@ NativeEngineARM::NativeEngineARM() : ExecutionCoordinator()
         {
             LOG(TRACE, "sigaltstack: sigstack={:#010x}", (uintptr_t)m_sigstack);
 
-            if (_install_sigaction(SIGILL, _sig_handler, false, &m_old_action_ill))
+            if (_install_sigaction(SIGILL, _sig_handler, true, &m_old_action_ill))
             {
                 if (_install_sigaction(SIG_TARGETRETURN, target_return_handler, true, &m_old_action_targetreturn))
                 {
