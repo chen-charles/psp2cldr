@@ -121,6 +121,10 @@ void target_init_handler(int sig, siginfo_t *info, void *ucontext)
 void _sig_handler(int sig, siginfo_t *info, void *ucontext)
 {
     assert(sig == SIGILL);
+    if (sig != info->si_signo)
+    {
+        raise(SIGTRAP);
+    }
     assert(sig == info->si_signo);
 
     auto ctx = reinterpret_cast<ucontext_t *>(ucontext);
@@ -439,6 +443,11 @@ void *thread_bootstrap(thread_bootstrap_args *args)
         }
     }
 
+#ifndef NDEBUG
+    assert(sigaltstack(nullptr, &ss) == 0);
+    assert(ss.ss_sp == (void *)thread->m_sigstack);
+#endif
+
     auto systid = (uintptr_t)syscall(SYS_gettid);
     LOG(TRACE, "tid={}, native tid={}", thread->tid(), systid);
     if (sigsetjmp(thread->m_return_ctx, 1) == 0)
@@ -516,6 +525,7 @@ ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_Native::start(uint32_t 
 
         if (pthread_create(&m_thread, NULL, (void *(*)(void *))thread_bootstrap, &args) != 0)
         {
+            m_thread_lock.release();
             _execute_recover_until_point(until, m_until_point_instr_backup, m_coord.proxy());
             throw std::runtime_error("pthread_create failed");
         }
