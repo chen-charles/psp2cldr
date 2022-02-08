@@ -9,13 +9,13 @@ Loading *userspace* PSP2 VELFs.
 `virt` platform with `smp=4` and `4G` memory  
 
 ### via [QEMU User Mode Emulation (qemu-linux-user)](User.Dockerfile)  
+*Memory leak is under investigation [#2](https://github.com/chen-charles/psp2cldr/issues/2).*  
 `arm-none-linux-gnueabihf`  
 Make sure to use a **recent** release of `qemu-arm`.  (for the record, `qemu-arm version 2.11.1` is not one of them).  
 Tested with `qemu-arm version 6.1.0 (qemu-6.1.0-10.fc35)`.  
-A devcontainer has also been setup to utilize `vscode`'s gdb debugger. Avoid placing breakpoints around `void thread_handle_signal()` as `gdb` doesn't know about the magic we are doing.  
 
 ### via [Docker](Dockerfile)  
-~~Noticed a memory leak, but it doesn't reproduce on full system emulation. Verified with `heaptrack`/`jemalloc` and `psp2cldr`'s `mmap` calls, seems it isn't caused by `psp2cldr`. Would be a good verification platform to work with, but be aware of this potential leakage.~~ (it was actually an undefined behavior due to an ABI non-compliance, fixed)  
+*Memory leak is under investigation [#2](https://github.com/chen-charles/psp2cldr/issues/2).*  
 #### `arm32v7/fedora:33`, `arm32v7/fedora:34`, `arm32v7/fedora:35`  
    * Recommended, comes with a working CMake, GCC 10/11.  
 #### `arm32v7/ubuntu:focal`
