@@ -9,6 +9,7 @@
 #define PSP2CLDR_IMP_PROVIDER_INCL_H
 
 #pragma warning(disable : 4190)
+#pragma clang diagnostic ignored "-Wreturn-type-c-linkage"
 
 #include <psp2cldr/access_proxy.hpp>
 #include <psp2cldr/arch.h>

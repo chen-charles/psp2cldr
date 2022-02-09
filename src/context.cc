@@ -183,7 +183,7 @@ std::string InterruptContext::read_str(uint32_t p_cstr) const
     auto &proxy = coord.proxy();
     char ch;
     std::stringstream ss;
-    while (ch = proxy.r<char>(p_cstr++))
+    while ((ch = proxy.r<char>(p_cstr++)))
         ss << ch;
     return ss.str();
 }
