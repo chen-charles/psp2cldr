@@ -97,11 +97,6 @@ class ExecutionThread_Native : public ExecutionThread
     virtual THREAD_EXECUTION_RESULT start(uint32_t from, uint32_t until);
     virtual THREAD_EXECUTION_RESULT join(uint32_t *retval);
     virtual void stop(uint32_t retval);
-    virtual pthread_t pthread_id() const
-    {
-        return m_thread;
-    }
-
     virtual void panic(int code = 0, LoadContext *load = nullptr);
 
   public:
@@ -120,7 +115,8 @@ class ExecutionThread_Native : public ExecutionThread
 
     std::function<void(ExecutionCoordinator &, ExecutionThread &, uint32_t)> m_intr_callback = {};
 
-    semaphore m_thread_lock{1};
+    mutable semaphore m_exitwait{0};
+    mutable std::mutex m_thread_lock;
     bool m_thread_is_valid{false};
     pthread_t m_thread;
     std::atomic<bool> m_stoppable{false};
@@ -132,8 +128,6 @@ class ExecutionThread_Native : public ExecutionThread
     std::atomic<bool> m_started{false};
     std::atomic<THREAD_EXECUTION_RESULT> m_result;
 
-    std::mutex join_lock;
-
     std::atomic<uint32_t> m_target_until_point;
     mutable ucontext_t m_target_ctx;
     sigjmp_buf m_return_ctx;
@@ -142,6 +136,8 @@ class ExecutionThread_Native : public ExecutionThread
     stack_t m_old_ss;
     char *m_sigstack = nullptr;
     size_t m_szsigstack = 4 * SIGSTKSZ;
+
+    std::atomic<uint32_t> m_sigill_request{0};
 };
 static_assert(std::atomic<bool>::is_always_lock_free);
 static_assert(std::atomic<uint32_t>::is_always_lock_free);
@@ -192,8 +188,6 @@ class NativeEngineARM : public ExecutionCoordinator
     struct sigaction m_old_action_ill;
     struct sigaction m_old_action_segv;
     struct sigaction m_old_action_int;
-    struct sigaction m_old_action_targetinit;
-    struct sigaction m_old_action_targetreturn;
     stack_t m_old_ss;
     char *m_sigstack = nullptr;
     size_t m_szsigstack = 4 * SIGSTKSZ;

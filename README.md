@@ -4,7 +4,7 @@ psp2cldr - PSP2 Custom Loader
 Loading *userspace* PSP2 VELFs.  
 
 ## Native
-**psp2cldr** runs directly on arm32v7-linux (with `glibc`)  
+**psp2cldr** runs directly on arm32v7-linux  
 ### via QEMU System Emulation
 `virt` platform with `smp=4` and `4G` memory  
 

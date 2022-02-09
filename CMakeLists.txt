@@ -45,7 +45,6 @@ find_package(Threads REQUIRED)
 target_link_libraries(psp2cldr PRIVATE Threads::Threads)
 
 include(CheckSymbolExists)
-list(APPEND CMAKE_REQUIRED_DEFINITIONS -D_GNU_SOURCE)   # pthread_sigqueue etc.
 list(APPEND CMAKE_REQUIRED_LIBRARIES ${CMAKE_DL_LIBS} Threads::Threads)
 check_symbol_exists(dlmopen "dlfcn.h" HAVE_DLMOPEN)
 
@@ -57,19 +56,17 @@ execute_process(COMMAND ${CMAKE_C_COMPILER} -dM -E -
 string(FIND ${PSP2CLDR_MACROS} "__ARM_ARCH_7A__" FIND_ARMv7A_RET)
 if (${FIND_ARMv7A_RET} GREATER "0")
     string(FIND ${PSP2CLDR_MACROS} "__ARM_PCS_VFP" FIND_ARMPCSVFP_RET)
-    check_symbol_exists(pthread_sigqueue "signal.h;pthread.h" HAVE_PTHREAD_SIGQUEUE)
     check_symbol_exists(sigqueue "signal.h" HAVE_SIGQUEUE)
     check_symbol_exists(sigaction "signal.h" HAVE_SIGACTION)
     check_symbol_exists(sigaltstack "signal.h" HAVE_SIGALTSTACK)
 
-    if("${HAVE_PTHREAD_SIGQUEUE}" AND "${HAVE_SIGQUEUE}" AND "${HAVE_SIGQUEUE}" AND "${HAVE_SIGALTSTACK}" AND ${FIND_ARMPCSVFP_RET} GREATER "0")
+    if("${HAVE_SIGQUEUE}" AND "${HAVE_SIGQUEUE}" AND "${HAVE_SIGALTSTACK}" AND ${FIND_ARMPCSVFP_RET} GREATER "0")
         message(STATUS "Using PSP2CLDR_NATIVE")
         add_compile_definitions(PSP2CLDR_NATIVE=1)
         add_compile_options(-fstack-protector-strong)
         target_sources(psp2cldr PRIVATE "include/psp2cldr/implementation/native.hpp" "src/native.cc")
 
     else()
-        unset(HAVE_PTHREAD_SIGQUEUE CACHE)
         unset(HAVE_SIGQUEUE CACHE)
         unset(HAVE_SIGACTION CACHE)
         unset(HAVE_SIGALTSTACK CACHE)
