@@ -59,6 +59,10 @@ class semaphore
             }
         };
 
+        canceler()
+        {
+        }
+
         void cancel()
         {
             cancelled = true;
