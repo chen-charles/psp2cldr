@@ -44,11 +44,10 @@ set(THREADS_PREFER_PTHREAD_FLAG TRUE)
 find_package(Threads REQUIRED)
 target_link_libraries(psp2cldr PRIVATE Threads::Threads)
 
-include(CheckSymbolExists)
 list(APPEND CMAKE_REQUIRED_LIBRARIES ${CMAKE_DL_LIBS} Threads::Threads)
-check_symbol_exists(dlmopen "dlfcn.h" HAVE_DLMOPEN)
-
 target_link_libraries(psp2cldr PRIVATE ${CMAKE_DL_LIBS})
+
+include(CheckSymbolExists)
 
 execute_process(COMMAND ${CMAKE_C_COMPILER} -dM -E -
                 INPUT_FILE /dev/null
