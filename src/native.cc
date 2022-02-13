@@ -582,7 +582,10 @@ uintptr_t NativeEngineARM::mmap(uintptr_t preferred, size_t length)
 {
     std::lock_guard g{m_memory_lock};
     auto ptr = m_allocator.alloc(0x1000, length);
-    m_translator.add(ptr, length, ptr);
+    if (ptr)
+    {
+        m_translator.add(ptr, length, ptr);
+    }
     return ptr;
 }
 

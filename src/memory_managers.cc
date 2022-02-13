@@ -115,9 +115,18 @@ uintptr_t MemoryAllocator::alloc(size_t alignment, size_t length)
     // native: some implementations of aligned_malloc does not acquire executable memory
     auto ptr = (uintptr_t)mmap(NULL, length, PROT_EXEC | PROT_READ | PROT_WRITE,
                                MAP_ANONYMOUS | MAP_POPULATE | MAP_PRIVATE, -1, 0);
+    if (ptr == -1) // MAP_FAILED
+    {
+        ptr = 0; // we should always use 0 to indicate failure to align with malloc
+        LOG(WARN, "memory allocation faild size={:#010x}, strerror={}", length, strerror(errno));
+    }
 #endif
-    m_allocated[ptr] = std::make_pair(alignment, length);
-    return ptr;
+    if (ptr)
+    {
+        m_allocated[ptr] = std::make_pair(alignment, length);
+        return ptr;
+    }
+    return 0;
 }
 
 void MemoryAllocator::free(uintptr_t ptr)

@@ -53,7 +53,7 @@ static void install_stub(LoadContext &ctx, uint32_t stub_loc, const sym_stub &st
 }
 
 static std::shared_ptr<HandlerContinuation> _handler_call_target_function_impl(int n_params, uint32_t target_func_ptr,
-                                                                               InterruptContext *ctx)
+                                                                               InterruptContext *ctx, std::string name)
 {
     static const uint32_t INSTR_UDF0_ARM = 0xe7f000f0;
 
@@ -63,7 +63,7 @@ static std::shared_ptr<HandlerContinuation> _handler_call_target_function_impl(i
     std::shared_ptr<HandlerContinuation> out = std::make_shared<HandlerContinuation>(0);
 
     sym_stub stub;
-    stub.name = "__psp2cldr__handler_continuation_to_" + u32_str_repr(target_func_ptr);
+    stub.name = "__psp2cldr__handler_continuation_to_" + u32_str_repr(target_func_ptr) + "_" + name;
     uint32_t original_lr = ctx->thread[RegisterAccessProxy::Register::LR]->r();
 
     uint32_t original_sp = ctx->thread[RegisterAccessProxy::Register::SP]->r();
@@ -95,14 +95,15 @@ std::shared_ptr<HandlerContinuation> InterruptContext::handler_call_target_funct
         throw std::logic_error("attempted to call an unregistered target function");
     if (load.nids_export_locations[nid_hash].first)
         throw std::logic_error("attempted to call a variable");
-    return _handler_call_target_function_impl(n_params, load.nids_export_locations[nid_hash].second, this);
+    return _handler_call_target_function_impl(n_params, load.nids_export_locations[nid_hash].second, this,
+                                              std::to_string(nid_hash));
 }
 
 std::shared_ptr<HandlerContinuation> InterruptContext::handler_call_target_function_impl(int n_params, std::string name)
 {
     if (load.libs_export_locations.count(name) == 0)
         throw std::logic_error("attempted to call an unregistered target function");
-    return _handler_call_target_function_impl(n_params, load.libs_export_locations[name].second, this);
+    return _handler_call_target_function_impl(n_params, load.libs_export_locations[name].second, this, name);
 }
 
 void InterruptContext::set_function_call_parameter(int idx, uint32_t value)
@@ -133,7 +134,7 @@ std::shared_ptr<HandlerResult> InterruptContext::install_forward_handler(std::st
     if (load.libs_export_locations.count(target))
     {
         auto loc = load.libs_export_locations[target].second;
-        auto pc = thread[RegisterAccessProxy::Register::PC]->r() & (~1);
+        auto pc = thread[RegisterAccessProxy::Register::PC]->r();
         bool isThumb = thread.is_thumb();
         if (isThumb)
         {
