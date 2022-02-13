@@ -377,5 +377,6 @@ usage: psp2cldr [<options>] [--begin <additional options> --end] [<nid implement
         LOG(WARN, "{} does not exist", velf.string());
     }
 
+    TLS::reset();
     return 0;
 }

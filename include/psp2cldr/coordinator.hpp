@@ -59,6 +59,16 @@ class TLS
         }
     }
 
+    static void reset()
+    {
+        std::lock_guard guard{tls_mutex};
+        for (auto &key : tls)
+        {
+            delete key;
+        }
+        tls.clear();
+    }
+
     uintptr_t alloc()
     {
         std::lock_guard guard{tls_mutex};
