@@ -298,6 +298,8 @@ class InterruptContext
     ExecutionThread &thread;
     LoadContext &load;
 
+    static std::recursive_mutex GLOBAL_PANIC_LOCK;
+
   public:
     virtual std::shared_ptr<HandlerResult> install_forward_handler(std::string target);
     virtual std::string read_str(uint32_t p_cstr) const;

@@ -209,11 +209,11 @@ std::pair<std::string, uint32_t> LoadContext::try_resolve_location(uint32_t loca
 #include <signal.h>
 #endif
 
-static std::recursive_mutex GLOBAL_PANIC_LOCK;
+std::recursive_mutex InterruptContext::GLOBAL_PANIC_LOCK;
 
 void panic(ExecutionCoordinator *coord, ExecutionThread *thread, LoadContext *load, int code, const char *msg)
 {
-    GLOBAL_PANIC_LOCK.lock();
+    InterruptContext::GLOBAL_PANIC_LOCK.lock();
 
     coord->thread_stopall(code);
     PANIC_LOG("code={:#x}", code);

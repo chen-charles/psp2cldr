@@ -8,6 +8,7 @@
 #include <cassert>
 #include <unistd.h>
 
+#include <psp2cldr/context.hpp>
 #include <psp2cldr/implementation/logger.hpp>
 #include <psp2cldr/implementation/native.hpp>
 #include <psp2cldr/utility/semaphore.hpp>
@@ -176,15 +177,23 @@ void _sig_handler(int sig, siginfo_t *info, void *ucontext)
     if (!exec_thread->m_started)
     {
         LOG(CRITICAL, "signal({}): thread has not started", exec_thread->tid());
+        InterruptContext::GLOBAL_PANIC_LOCK.lock();
         assert(false);
         _exit(0xc);
     }
 
     if (exec_thread->m_handling_interrupt)
     {
-        LOG(CRITICAL, "signal({}): thread is already handling_interrupt!!!", exec_thread->tid());
-        LOG(CRITICAL, "signal({}): si_signo={} pc={} si_addr={} si_code={}", exec_thread->tid(), sig,
-            ctx->uc_mcontext.arm_pc, info->si_addr, (uint32_t)(info->si_code));
+        /**
+         * how do we interrupt/stop() when the thread is currently in a provider function?
+         * we will likely corrupt stuff...
+         */
+        if (exec_thread->m_stop_called)
+        {
+            siglongjmp(exec_thread->m_return_ctx, 1);
+        }
+
+        InterruptContext::GLOBAL_PANIC_LOCK.lock();
         switch (sig)
         {
         case SIGSEGV:
@@ -206,6 +215,7 @@ void _sig_handler(int sig, siginfo_t *info, void *ucontext)
 
     if (ctx->uc_stack.ss_sp != exec_thread->m_sigstack)
     {
+        InterruptContext::GLOBAL_PANIC_LOCK.lock();
         assert(false);
         _exit(0xf);
     }
