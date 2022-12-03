@@ -392,7 +392,13 @@ void thread_handle_signal()
     }
 
 _done:
+    // we need to be able to call pthread_kill to stop()
+    // but we can't use m_thread_lock because if the thread is currently being joined, we won't be able to get that lock
+    // so we need another semaphore to signal whether it is safe to exit this thread
+    thread->m_exitwait.acquire();
+
     pthread_setspecific(thread_obj_key, NULL);
+    // we must not trigger any interrupts to this thread after this point
 
     _execute_recover_until_point(thread->m_target_until_point, thread->m_until_point_instr_backup,
                                  thread->m_coord.proxy());
@@ -401,11 +407,6 @@ _done:
     thread->m_state = ExecutionThread::THREAD_EXECUTION_STATE::RESTARTABLE;
     thread->m_handling_interrupt = false;
     thread->m_started = false;
-
-    // we need to be able to call pthread_kill to stop()
-    // but we can't use m_thread_lock because if the thread is currently being joined, we won't be able to get that lock
-    // so we need another semaphore to signal whether it is safe to exit this thread
-    thread->m_exitwait.acquire();
 
     thread->m_stop_called = false;
 
