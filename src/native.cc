@@ -190,7 +190,9 @@ void _sig_handler(int sig, siginfo_t *info, void *ucontext)
          */
         if (exec_thread->m_stop_called)
         {
-            siglongjmp(exec_thread->m_return_ctx, 1);
+            // do nothing and return
+            // worst-case we will stop at the next interrupt entry, better than crashing
+            return;
         }
 
         InterruptContext::GLOBAL_PANIC_LOCK.lock();
@@ -404,6 +406,8 @@ _done:
     // but we can't use m_thread_lock because if the thread is currently being joined, we won't be able to get that lock
     // so we need another semaphore to signal whether it is safe to exit this thread
     thread->m_exitwait.acquire();
+
+    thread->m_stop_called = false;
 
 #ifdef __linux__
     LOG(TRACE, "execute({}, {}): thread exit", thread->tid(), (uintptr_t)syscall(SYS_gettid));
