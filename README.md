@@ -4,7 +4,7 @@ psp2cldr - PSP2 Custom Loader
 Loading *userspace* PSP2 VELFs.  
 
 ## Native
-**psp2cldr** runs directly on arm32v7-linux  
+**psp2cldr** runs directly on `arm32v7-linux` and thus also on `aarch64` with `CONFIG_COMPAT` kernels  
 ### via QEMU System Emulation
 `virt` platform with `smp=4` and `4G` memory  
 
@@ -22,7 +22,7 @@ Tested with `qemu-arm version 6.1.0 (qemu-6.1.0-10.fc35)`.
    * CMake 3.16 has a [bug](https://gitlab.kitware.com/cmake/cmake/-/issues/20568) that renders it unusable on armhf, you can either cross-compile ([GNU Toolchain for the A-profile Architecture](https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain/gnu-a/downloads)), build CMake 3.18+ from source, or use the [Kitware APT Repository](https://apt.kitware.com/) (*had no luck though).  
 
 ## Usage
-   1. Displaying information of the supplied VELF  
+   1. Display information of the supplied VELF  
    `psp2cldr --readelf XXX.velf`
    2. Load ELFs, and optionally VELFs (see usage via `psp2cldr -h`)  
 
