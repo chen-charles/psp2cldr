@@ -14,10 +14,12 @@
 
 #if PSP2CLDR_NATIVE
 #include <psp2cldr/implementation/native.hpp>
+#elif PSP2CLDR_NATIVE_MSVC
+#include <psp2cldr/implementation/native_msvc.hpp>
 #elif PSP2CLDR_EMULATION
 #include <psp2cldr/implementation/emulation.hpp>
 #else
-#error Either PSP2CLDR_NATIVE or PSP2CLDR_EMULATION must be defined.
+#error Either PSP2CLDR_NATIVE, PSP2CLDR_NATIVE_MSVC or PSP2CLDR_EMULATION must be defined.
 #endif
 
 #ifndef Coordinator_Impl

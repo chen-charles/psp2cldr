@@ -37,8 +37,6 @@ if (NOT spdlog_FOUND)
 endif()
 target_link_libraries(psp2cldr PRIVATE spdlog::spdlog)
 
-target_link_libraries(psp2cldr PRIVATE stdc++fs)    # std::experimental::filesystem for gcc 7 and std::filesystem for gcc 8
-
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 set(THREADS_PREFER_PTHREAD_FLAG TRUE)
 find_package(Threads REQUIRED)
@@ -49,21 +47,34 @@ target_link_libraries(psp2cldr PRIVATE ${CMAKE_DL_LIBS})
 
 include(CheckSymbolExists)
 
-execute_process(COMMAND ${CMAKE_C_COMPILER} -dM -E -
-                INPUT_FILE /dev/null
-                OUTPUT_VARIABLE PSP2CLDR_MACROS)
-string(FIND ${PSP2CLDR_MACROS} "__ARM_ARCH_7A__" FIND_ARMv7A_RET)
-if (${FIND_ARMv7A_RET} GREATER "0")
+if (MSVC)
+    check_symbol_exists(_M_ARM "" FIND_ARMv7A_RET)
+else()
+    execute_process(COMMAND ${CMAKE_C_COMPILER} -dM -E -
+                    INPUT_FILE /dev/null
+                    OUTPUT_VARIABLE PSP2CLDR_MACROS)
+    string(FIND ${PSP2CLDR_MACROS} "__ARM_ARCH_7A__" FIND_ARMv7A_RET)
     string(FIND ${PSP2CLDR_MACROS} "__ARM_PCS_VFP" FIND_ARMPCSVFP_RET)
+endif()
+
+if (${FIND_ARMv7A_RET} GREATER "0")
     check_symbol_exists(sigaction "signal.h" HAVE_SIGACTION)
     check_symbol_exists(sigaltstack "signal.h" HAVE_SIGALTSTACK)
 
-    if("${HAVE_SIGACTION}" AND "${HAVE_SIGALTSTACK}" AND ${FIND_ARMPCSVFP_RET} GREATER "0")
+    if(MSVC)
+        message(STATUS "Using PSP2CLDR_NATIVE_MSVC")
+        add_compile_definitions(PSP2CLDR_NATIVE_MSVC=1)
+        set_target_properties(psp2cldr PROPERTIES COMPILE_FLAGS "/GS /RTCs /std:c++20 /EHsc /EHa")
+        # add_compile_options(/GS /RTCs /std:c++20 /EHsc /EHa)
+
+        target_sources(psp2cldr PRIVATE "include/psp2cldr/implementation/native_msvc.hpp" "src/native_msvc.cc")
+    elseif("${HAVE_SIGACTION}" AND "${HAVE_SIGALTSTACK}" AND ${FIND_ARMPCSVFP_RET} GREATER "0" AND CMAKE_SIZEOF_VOID_P EQUAL 4)
         message(STATUS "Using PSP2CLDR_NATIVE")
+        target_link_libraries(psp2cldr PRIVATE stdc++fs)    # std::experimental::filesystem for gcc 7 and std::filesystem for gcc 8
         add_compile_definitions(PSP2CLDR_NATIVE=1)
         add_compile_options(-fstack-protector-strong)
-        target_sources(psp2cldr PRIVATE "include/psp2cldr/implementation/native.hpp" "src/native.cc")
 
+        target_sources(psp2cldr PRIVATE "include/psp2cldr/implementation/native.hpp" "src/native.cc")
     else()
         unset(HAVE_SIGACTION CACHE)
         unset(HAVE_SIGALTSTACK CACHE)
