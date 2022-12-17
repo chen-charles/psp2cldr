@@ -119,7 +119,6 @@ class ExecutionThread_NativeMSVC : public ExecutionThread
 
     mutable std::mutex m_thread_lock;
     std::unique_ptr<std::thread> m_thread = nullptr;
-    HANDLE m_handle;
     DWORD m_thread_native_id = 0;
     mutable semaphore m_exitwait{ 0 };
     mutable CONTEXT m_target_ctx;

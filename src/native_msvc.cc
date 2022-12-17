@@ -189,7 +189,8 @@ LONG NTAPI _GlobalExceptionHandler(_EXCEPTION_POINTERS* ep)
             tls_thread_return = nullptr;
 
             // this thread should never come back here again
-
+            tls_thread->m_exitwait.release();
+            
             return EXCEPTION_CONTINUE_EXECUTION;
         }
     }
@@ -355,7 +356,6 @@ struct thread_bootstrap_args
 void thread_bootstrap(thread_bootstrap_args* args)
 {
     tls_thread = args->thread;
-    args->thread->m_handle = GetCurrentThread();
     args->thread->m_thread_native_id = GetCurrentThreadId();
     args->start_result = ExecutionThread::THREAD_EXECUTION_RESULT::OK;
     args->barrier.release();
@@ -419,8 +419,6 @@ ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_NativeMSVC::start(uint3
         m_result = THREAD_EXECUTION_RESULT::OK;
 
         m_thread = std::make_unique<std::thread>(thread_bootstrap, &args);
-
-        m_exitwait.release();
     }
 
     args.barrier.acquire();
@@ -461,29 +459,33 @@ void ExecutionThread_NativeMSVC::stop(uint32_t retval)
         return;
     }
 
-    // FIXME: stop() called before bootstrap completes
     if (m_exitwait.try_acquire())
     {
         // the target thread won't be able to exit
         if (m_thread_native_id != GetCurrentThreadId())
         {
-            if (SuspendThread(m_handle) != (DWORD)-1)
+            if (HANDLE handle = OpenThread(THREAD_ALL_ACCESS, FALSE, m_thread_native_id))
             {
-                CONTEXT remote_ctx;
-                remote_ctx.ContextFlags = CONTEXT_CONTROL;
-                if (GetThreadContext(m_handle, &remote_ctx))
+                if (SuspendThread(handle) != (DWORD)-1)
                 {
-                    m_stop_pc = remote_ctx.Pc;
-                    remote_ctx.Pc = (uint32_t)&_stop_dep_or_udf;
-
-                    if (!SetThreadContext(m_handle, &remote_ctx))
+                    CONTEXT remote_ctx;
+                    remote_ctx.ContextFlags = CONTEXT_CONTROL;
+                    if (GetThreadContext(handle, &remote_ctx))
                     {
-                        LOG(WARN, "failed to SetThreadContext, LastError={}", GetLastError());
+                        m_stop_pc = remote_ctx.Pc;
+                        remote_ctx.Pc = (uint32_t)&_stop_dep_or_udf;
+
+                        if (!SetThreadContext(handle, &remote_ctx))
+                        {
+                            LOG(WARN, "failed to SetThreadContext, LastError={}", GetLastError());
+                        }
                     }
+
+                    DWORD Error = ResumeThread(handle);
+                    assert(Error != (DWORD)-1);
                 }
 
-                DWORD Error = ResumeThread(m_handle);
-                assert(Error != (DWORD)-1);
+                CloseHandle(handle);
             }
         }
         m_exitwait.release();
