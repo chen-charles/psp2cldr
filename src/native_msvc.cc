@@ -194,13 +194,19 @@ LONG NTAPI _GlobalExceptionHandler(_EXCEPTION_POINTERS* ep)
         }
     }
 
-    if (code == EXCEPTION_SINGLE_STEP || code == EXCEPTION_BREAKPOINT || code == EXCEPTION_ACCESS_VIOLATION)
+    if (code == EXCEPTION_SINGLE_STEP || code == EXCEPTION_BREAKPOINT)
     {
         return EXCEPTION_CONTINUE_SEARCH;
     }
 
     if (tls_thread != nullptr)
     {
+        if (tls_thread->m_stop_pc != 0)
+        {
+            ep->ContextRecord->Pc = tls_thread->m_stop_pc;
+            tls_thread->m_stop_pc = 0;
+        }
+
         if (tls_thread->m_handling_interrupt)
         {
             if (tls_thread->m_stop_called)
@@ -349,6 +355,8 @@ struct thread_bootstrap_args
 void thread_bootstrap(thread_bootstrap_args* args)
 {
     tls_thread = args->thread;
+    args->thread->m_handle = GetCurrentThread();
+    args->thread->m_thread_native_id = GetCurrentThreadId();
     args->start_result = ExecutionThread::THREAD_EXECUTION_RESULT::OK;
     args->barrier.release();
     args = nullptr;
@@ -442,22 +450,44 @@ ExecutionThread::THREAD_EXECUTION_RESULT ExecutionThread_NativeMSVC::join(uint32
     return THREAD_EXECUTION_RESULT::JOIN_FAILED;
 }
 
+uint32_t _stop_dep_or_udf = 0xffffffff;
+
 void ExecutionThread_NativeMSVC::stop(uint32_t retval)
 {
     m_stop_called = true;
 
-    // TODO: how do we signal an exception inside SEH? pthread_kill w/ signal?
-    //{
-    //    if (m_exitwait.try_acquire())
-    //    {
-    //        // the target thread won't be able to exit
-    //        if (pthread_equal(pthread_self(), m_thread) == 0) // if not equal
-    //        {
-    //            pthread_kill(m_thread, SIGILL);
-    //        }
-    //        m_exitwait.release();
-    //    }
-    //}
+    if (m_state != THREAD_EXECUTION_STATE::RUNNING)
+    {
+        return;
+    }
+
+    // FIXME: stop() called before bootstrap completes
+    if (m_exitwait.try_acquire())
+    {
+        // the target thread won't be able to exit
+        if (m_thread_native_id != GetCurrentThreadId())
+        {
+            if (SuspendThread(m_handle) != (DWORD)-1)
+            {
+                CONTEXT remote_ctx;
+                remote_ctx.ContextFlags = CONTEXT_CONTROL;
+                if (GetThreadContext(m_handle, &remote_ctx))
+                {
+                    m_stop_pc = remote_ctx.Pc;
+                    remote_ctx.Pc = (uint32_t)&_stop_dep_or_udf;
+
+                    if (!SetThreadContext(m_handle, &remote_ctx))
+                    {
+                        LOG(WARN, "failed to SetThreadContext, LastError={}", GetLastError());
+                    }
+                }
+
+                DWORD Error = ResumeThread(m_handle);
+                assert(Error != (DWORD)-1);
+            }
+        }
+        m_exitwait.release();
+    }
 }
 
 NativeMSVCEngineARM::NativeMSVCEngineARM() : ExecutionCoordinator()

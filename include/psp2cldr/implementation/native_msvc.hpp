@@ -114,10 +114,13 @@ class ExecutionThread_NativeMSVC : public ExecutionThread
     uint32_t m_until_point_instr_backup{ 0 };
     std::atomic<THREAD_EXECUTION_RESULT> m_result;
     std::atomic<bool> m_stop_called{ false };
+    uint32_t m_stop_pc = 0;
     std::atomic<bool> m_handling_interrupt{ false };
 
     mutable std::mutex m_thread_lock;
     std::unique_ptr<std::thread> m_thread = nullptr;
+    HANDLE m_handle;
+    DWORD m_thread_native_id = 0;
     mutable semaphore m_exitwait{ 0 };
     mutable CONTEXT m_target_ctx;
     EXCEPTION_RECORD m_exception_record;
