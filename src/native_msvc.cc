@@ -155,11 +155,13 @@ _done:
 
     thread->m_stop_called = false;
 
-    return EXCEPTION_EXECUTE_HANDLER;
+    ExitThread(0);
+    return EXCEPTION_CONTINUE_EXECUTION;
 }
 
-int filter(unsigned int code, struct _EXCEPTION_POINTERS* ep)
+LONG NTAPI _GlobalExceptionHandler(_EXCEPTION_POINTERS* ep)
 {
+    unsigned int code = ep->ExceptionRecord->ExceptionCode;
     if (code == EXCEPTION_ILLEGAL_INSTRUCTION)
     {
         if (tls_thread_init != nullptr)
@@ -185,6 +187,9 @@ int filter(unsigned int code, struct _EXCEPTION_POINTERS* ep)
             assert(!TESTBIT(ep->ContextRecord->Pc, 0));
 
             tls_thread_return = nullptr;
+
+            // this thread should never come back here again
+
             return EXCEPTION_CONTINUE_EXECUTION;
         }
     }
@@ -214,14 +219,19 @@ int filter(unsigned int code, struct _EXCEPTION_POINTERS* ep)
             tls_thread->m_target_ctx = *ep->ContextRecord;
             tls_thread->m_exception_record = *ep->ExceptionRecord;
 
-            return thread_handle_signal();
+            int result = thread_handle_signal();
+            if (result == EXCEPTION_CONTINUE_EXECUTION)
+            {
+                *ep->ContextRecord = tls_thread->m_target_ctx;
+            }
+            return result;
         }
     }
 
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
-void _do_trigger_sigill()
+void _trigger_sigill()
 {
     std::atomic_signal_fence(std::memory_order_seq_cst);
 
@@ -230,18 +240,6 @@ void _do_trigger_sigill()
     __emit(0xffff);
 
     std::atomic_signal_fence(std::memory_order_seq_cst);
-}
-
-void _trigger_sigill()
-{
-    __try
-    {
-        _do_trigger_sigill();
-    }
-    __except (filter(GetExceptionCode(), GetExceptionInformation()))
-    {
-
-    }
 }
 
 ExecutionThread_NativeMSVC::ExecutionThread_NativeMSVC(ExecutionCoordinator& coord) : m_coord(coord)
@@ -356,6 +354,16 @@ void thread_bootstrap(thread_bootstrap_args* args)
     args = nullptr;
 
     tls_thread_return = tls_thread;
+
+    // HAX: NT checks stack validity on EH return, but we allocate our own stack
+    // FAIL_FAST_INVALID_SET_OF_CONTEXT_c0000409_ntdll.dll!RtlGuardRestoreContext
+    NT_TIB* teb = (NT_TIB*)NtCurrentTeb();
+    LOG(TRACE, "NT TEB stack_base={:#010x} stack_limit={:#010x}", (uint32_t)teb->StackBase, (uint32_t)teb->StackLimit);
+    teb->StackBase = (void*)0xff000000;
+    teb->StackLimit = (void*)0x1000;
+
+    LOG(TRACE, "bootstrap complete");
+
     _trigger_sigill();
 }
 
@@ -454,10 +462,14 @@ void ExecutionThread_NativeMSVC::stop(uint32_t retval)
 
 NativeMSVCEngineARM::NativeMSVCEngineARM() : ExecutionCoordinator()
 {
+    m_ehhandle = AddVectoredExceptionHandler(1, _GlobalExceptionHandler);
+    assert(m_ehhandle);
 }
 
 NativeMSVCEngineARM::~NativeMSVCEngineARM()
 {
+    RemoveVectoredExceptionHandler(m_ehhandle);
+    m_ehhandle = nullptr;
 }
 
 #include <psp2cldr/context.hpp>

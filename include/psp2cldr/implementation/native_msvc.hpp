@@ -167,6 +167,7 @@ class NativeMSVCEngineARM : public ExecutionCoordinator
   protected:
     std::mutex m_threads_lock;
     std::unordered_set<std::shared_ptr<ExecutionThread>> m_threads;
+    void* m_ehhandle = nullptr;
 };
 
 

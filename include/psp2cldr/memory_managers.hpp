@@ -95,9 +95,7 @@ class MemoryTranslator
 class MemoryAllocator
 {
   public:
-    MemoryAllocator()
-    {
-    }
+    MemoryAllocator();
     virtual ~MemoryAllocator()
     {
     }
@@ -108,6 +106,7 @@ class MemoryAllocator
 
   protected:
     std::unordered_map<uintptr_t, std::pair<size_t, size_t>> m_allocated;
+    size_t m_min_alignment = 0x1000;
 };
 
 #endif
