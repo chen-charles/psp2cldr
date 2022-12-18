@@ -102,15 +102,48 @@ int MemoryTranslator::erase(uintptr_t addr, size_t length)
 }
 
 #ifdef _MSC_VER
-#include <malloc.h>
+#include <Windows.h>
+#pragma comment(lib, "onecore.lib")
 #else
 #include <sys/mman.h>
 #endif
 
-uintptr_t MemoryAllocator::alloc(size_t alignment, size_t length)
+MemoryAllocator::MemoryAllocator()
 {
 #ifdef _MSC_VER
-    auto ptr = (uintptr_t)_aligned_malloc(length, alignment);
+    SYSTEM_INFO info;
+    GetSystemInfo(&info);
+    m_min_alignment = info.dwAllocationGranularity;
+#endif
+}
+
+uintptr_t MemoryAllocator::alloc(size_t alignment, size_t length)
+{
+    if (alignment < m_min_alignment)
+    {
+        alignment = m_min_alignment;
+    }
+
+#ifdef _MSC_VER
+    MEM_ADDRESS_REQUIREMENTS addressReqs = { 0 };
+    MEM_EXTENDED_PARAMETER param = { 0 };
+
+    addressReqs.Alignment = alignment;
+
+    param.Type = MemExtendedParameterAddressRequirements;
+    param.Pointer = &addressReqs;
+
+    auto ptr = (uintptr_t)VirtualAlloc2(
+        nullptr,
+        nullptr,
+        length,
+        MEM_RESERVE | MEM_COMMIT,
+        PAGE_EXECUTE_READWRITE,
+        &param, 1);
+    if (ptr == 0)
+    {
+        LOG(WARN, "memory allocation faild size={:#010x}, LastError={}", length, GetLastError());
+    }
 #else
     // native: some implementations of aligned_malloc does not acquire executable memory
     auto ptr = (uintptr_t)mmap(NULL, length, PROT_EXEC | PROT_READ | PROT_WRITE,
@@ -138,7 +171,10 @@ void MemoryAllocator::free(uintptr_t ptr)
     m_allocated.erase(it);
 
 #ifdef _MSC_VER
-    _aligned_free((void *)ptr);
+    if (VirtualFree((void*)ptr, 0, MEM_RELEASE) == 0)
+    {
+        LOG(WARN, "memory free faild size={:#010x}, LastError={}", length, GetLastError());
+    }
 #else
     if (munmap((void *)ptr, length) == -1)
         throw std::runtime_error(strerror(errno));
