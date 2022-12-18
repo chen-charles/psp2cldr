@@ -4,7 +4,7 @@ psp2cldr - PSP2 Custom Loader
 Loading *userspace* PSP2 VELFs.  
 
 ## Native
-**psp2cldr** runs directly on `arm32v7-linux` and thus also on `aarch64` with `CONFIG_COMPAT` kernels  
+**psp2cldr** runs directly on `arm32v7-linux` and thus also on `aarch64` with `CONFIG_COMPAT` kernels.  
 ### via QEMU System Emulation
 `virt` platform with `smp=4` and `4G` memory  
 
@@ -20,6 +20,12 @@ Tested with `qemu-arm version 6.1.0 (qemu-6.1.0-10.fc35)`.
    * Recommended, comes with a working CMake, GCC 10/11.  
 #### `arm32v7/ubuntu:focal`
    * CMake 3.16 has a [bug](https://gitlab.kitware.com/cmake/cmake/-/issues/20568) that renders it unusable on armhf, you can either cross-compile ([GNU Toolchain for the A-profile Architecture](https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain/gnu-a/downloads)), build CMake 3.18+ from source, or use the [Kitware APT Repository](https://apt.kitware.com/) (*had no luck though).  
+#### [`arm64v8/ubuntu:jammy`](arm64.Dockerfile)
+   * Demonstrates we could run natively on `aarch64`.  
+
+## Native_MSVC
+**psp2cldr** also runs directly on `arm64-windows` (not `arm-uwp`) when compiled for the `ARM` target (e.g., `amd64_arm`, `x86_arm`, `arm64_arm`).  
+*MSVC Redistributable for `ARM` seems to be missing on `arm64-windows` [#4](https://github.com/chen-charles/psp2cldr/pull/4). Extracted runtime libraries can be found [here](https://github.com/chen-charles/psp2cldr/files/10253155/vc_redist.arm.zip).*  
 
 ## Usage
    1. Display information of the supplied VELF  
