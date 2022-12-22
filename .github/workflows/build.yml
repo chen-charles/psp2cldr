@@ -64,4 +64,4 @@ jobs:
     - uses: jidicula/clang-format-action@v4.9.0
       with:
         clang-format-version: '13'
-        exclude-regex: "(vita-toolchain|elf\.h)"
+        exclude-regex: '(include/vita-toolchain|include/elf.h)'
