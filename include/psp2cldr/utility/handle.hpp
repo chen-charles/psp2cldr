@@ -81,7 +81,8 @@ protected:
 };
 
 // MT-safe
-template <class T> class HandleStorage : public HandleAllocator
+template <class T>
+class HandleStorage : public HandleAllocator
 {
 public:
 	HandleStorage(OSL_HANDLE low, OSL_HANDLE high = INT32_MAX) : HandleAllocator(low, high)

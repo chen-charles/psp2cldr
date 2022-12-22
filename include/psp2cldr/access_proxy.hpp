@@ -28,14 +28,16 @@ public:
 	virtual void *copy_out(void *dest, uint64_t src, size_t num) const = 0;
 
 public:
-	template <class T, typename = std::enable_if_t<std::is_arithmetic<T>::value>> T r(uint64_t location) const
+	template <class T, typename = std::enable_if_t<std::is_arithmetic<T>::value>>
+	T r(uint64_t location) const
 	{
 		T out;
 		copy_out(&out, location, sizeof(T));
 		return out;
 	}
 
-	template <class T, typename = std::enable_if_t<std::is_arithmetic<T>::value>> void w(uint64_t location, const T &value) const
+	template <class T, typename = std::enable_if_t<std::is_arithmetic<T>::value>>
+	void w(uint64_t location, const T &value) const
 	{
 		copy_in(location, &value, sizeof(T));
 	}

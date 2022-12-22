@@ -74,7 +74,8 @@ public:
 		MulticastDelegate<std::function<void()>> on_completed;
 	};
 
-	template <class Rep, class Period> bool cancellable_acquire_for(std::chrono::duration<Rep, Period> dur, const canceler &canc = {})
+	template <class Rep, class Period>
+	bool cancellable_acquire_for(std::chrono::duration<Rep, Period> dur, const canceler &canc = {})
 	{
 		std::unique_lock lk{m_lock};
 
@@ -161,7 +162,8 @@ protected:
 	uintptr_t m_ct = 0;
 };
 
-template <class T> class semaphore_guard
+template <class T>
+class semaphore_guard
 {
 public:
 	semaphore_guard(T &sema) : m_sema(sema)

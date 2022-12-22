@@ -259,12 +259,14 @@ public:
 	virtual ~InterruptContext()
 	{}
 
-	template <typename... Targs> std::shared_ptr<HandlerContinuation> handler_call_target_function(NIDHASH_t nid_hash, Targs &&... args)
+	template <typename... Targs>
+	std::shared_ptr<HandlerContinuation> handler_call_target_function(NIDHASH_t nid_hash, Targs &&...args)
 	{
 		return handler_call_target_function_unpack(0, nid_hash, args...);
 	}
 
-	template <typename... Targs> std::shared_ptr<HandlerContinuation> handler_call_target_function(std::string name, Targs &&... args)
+	template <typename... Targs>
+	std::shared_ptr<HandlerContinuation> handler_call_target_function(std::string name, Targs &&...args)
 	{
 		return handler_call_target_function_unpack(0, name, args...);
 	}
@@ -293,14 +295,15 @@ protected:
 		return handler_call_target_function_impl(idx, nid_hash);
 	}
 
-	template <typename T> std::shared_ptr<HandlerContinuation> handler_call_target_function_unpack(int idx, NIDHASH_t nid_hash, T value)
+	template <typename T>
+	std::shared_ptr<HandlerContinuation> handler_call_target_function_unpack(int idx, NIDHASH_t nid_hash, T value)
 	{
 		set_function_call_parameter(idx, value);
 		return handler_call_target_function_unpack(idx + 1, nid_hash);
 	}
 
 	template <typename T, typename... Targs>
-	std::shared_ptr<HandlerContinuation> handler_call_target_function_unpack(int idx, NIDHASH_t nid_hash, T value, Targs &&... args)
+	std::shared_ptr<HandlerContinuation> handler_call_target_function_unpack(int idx, NIDHASH_t nid_hash, T value, Targs &&...args)
 	{
 		set_function_call_parameter(idx, value);
 		return handler_call_target_function_unpack(idx + 1, nid_hash, args...);
@@ -311,14 +314,15 @@ protected:
 		return handler_call_target_function_impl(idx, name);
 	}
 
-	template <typename T> std::shared_ptr<HandlerContinuation> handler_call_target_function_unpack(int idx, std::string name, T value)
+	template <typename T>
+	std::shared_ptr<HandlerContinuation> handler_call_target_function_unpack(int idx, std::string name, T value)
 	{
 		set_function_call_parameter(idx, value);
 		return handler_call_target_function_unpack(idx + 1, name);
 	}
 
 	template <typename T, typename... Targs>
-	std::shared_ptr<HandlerContinuation> handler_call_target_function_unpack(int idx, std::string name, T value, Targs &&... args)
+	std::shared_ptr<HandlerContinuation> handler_call_target_function_unpack(int idx, std::string name, T value, Targs &&...args)
 	{
 		set_function_call_parameter(idx, value);
 		return handler_call_target_function_unpack(idx + 1, name, args...);

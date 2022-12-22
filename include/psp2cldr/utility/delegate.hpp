@@ -12,7 +12,8 @@
 #include <functional>
 #include <vector>
 
-template <typename FunctorType> class MulticastDelegate
+template <typename FunctorType>
+class MulticastDelegate
 {
 public:
 	class Token
@@ -46,7 +47,8 @@ public:
 			return m_valid;
 		}
 
-		template <typename... Params> void invoke(Params &&... params) const
+		template <typename... Params>
+		void invoke(Params &&...params) const
 		{
 			functor(std::forward<Params>(params)...);
 		}
@@ -58,7 +60,8 @@ public:
 		return functions.back();
 	}
 
-	template <typename... Params> void broadcast(Params &&... params) const
+	template <typename... Params>
+	void broadcast(Params &&...params) const
 	{
 		for (const auto &token : functions)
 		{

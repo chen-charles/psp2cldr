@@ -59,8 +59,9 @@ jobs:
   style:
     runs-on: ubuntu-latest
     steps:
-    
+
     - uses: actions/checkout@v3
     - uses: jidicula/clang-format-action@v4.9.0
       with:
         clang-format-version: '13'
+        exclude-regex: "(vita-toolchain|elf\.h)"
