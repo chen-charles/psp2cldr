@@ -1,6 +1,6 @@
 {
     "C_Cpp.clang_format_sortIncludes": true,
-    "C_Cpp.clang_format_style": "Microsoft",
+    "C_Cpp.clang_format_style": "file",
     "C_Cpp.clang_format_fallbackStyle": "Microsoft",
     "editor.formatOnSave": true,
     "editor.formatOnPaste": true,
