@@ -703,8 +703,7 @@ void NativeEngineARM::thread_stopall(int retval)
 #include <psp2cldr/context.hpp>
 
 void ExecutionThread_Native::panic(int code, LoadContext *load)
-{
-}
+{}
 
 void NativeEngineARM::panic(int code, LoadContext *load)
 {
@@ -753,8 +752,7 @@ void NativeEngineARM::panic(int code, LoadContext *load)
 			PANIC_LOG("\tinstr@PC={:#010x}", proxy().r<uint32_t>((*p_thread)[RegisterAccessProxy::Register::PC]->r()));
 		}
 		catch (...)
-		{
-		}
+		{}
 	}
 }
 

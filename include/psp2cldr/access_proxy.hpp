@@ -18,15 +18,14 @@ class MemoryAccessProxy
 {
 public:
 	virtual ~MemoryAccessProxy()
-	{
-	}
+	{}
 
 public:
-    // Copy Into the Target Environment from the Host
-    virtual uint64_t copy_in(uint64_t dest, const void *src, size_t num) const = 0;
+	// Copy Into the Target Environment from the Host
+	virtual uint64_t copy_in(uint64_t dest, const void *src, size_t num) const = 0;
 
-    // Copy Out from the Target Environment to the Host
-    virtual void *copy_out(void *dest, uint64_t src, size_t num) const = 0;
+	// Copy Out from the Target Environment to the Host
+	virtual void *copy_out(void *dest, uint64_t src, size_t num) const = 0;
 
 public:
 	template <class T, typename = std::enable_if_t<std::is_arithmetic<T>::value>> T r(uint64_t location) const
@@ -177,13 +176,12 @@ public:
 	{
 		if (name == Register::INVALID)
 		{
-            throw std::logic_error("accessing an invalid register");
+			throw std::logic_error("accessing an invalid register");
 		}
 	}
 
 	virtual ~RegisterAccessProxy()
-	{
-	}
+	{}
 
 	virtual uint32_t w(uint32_t value) = 0;
 	virtual uint32_t r() const = 0;
@@ -208,7 +206,7 @@ public:
 	}
 
 private:
-    Register m_name;
+	Register m_name;
 };
 
 #endif

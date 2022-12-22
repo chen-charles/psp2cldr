@@ -10,8 +10,8 @@
 
 enum ProviderPokeResult
 {
-    FUNCTION = 0,
-    VARIABLE,
+	FUNCTION = 0,
+	VARIABLE,
 };
 
 #endif

@@ -18,169 +18,164 @@
 
 class semaphore
 {
-  public:
-    semaphore(uintptr_t initial = 0) : m_ct(initial)
-    {
-    }
-    virtual ~semaphore()
-    {
-    }
+public:
+	semaphore(uintptr_t initial = 0) : m_ct(initial)
+	{}
+	virtual ~semaphore()
+	{}
 
-    void acquire()
-    {
-        std::unique_lock lk{m_lock};
-        m_cv.wait(lk, [&]() { return m_ct; });
-        m_ct--;
-    }
+	void acquire()
+	{
+		std::unique_lock lk{m_lock};
+		m_cv.wait(lk, [&]() { return m_ct; });
+		m_ct--;
+	}
 
-    class canceler
-    {
-        friend class scoped_canceler;
-        mutable semaphore *sema;
+	class canceler
+	{
+		friend class scoped_canceler;
+		mutable semaphore *sema;
 
-      protected:
-        std::atomic<bool> cancelled{false};
+	protected:
+		std::atomic<bool> cancelled{false};
 
-      public:
-        class scoped_canceler
-        {
-            const canceler &canc;
+	public:
+		class scoped_canceler
+		{
+			const canceler &canc;
 
-          public:
-            scoped_canceler(const canceler &in_canc, semaphore *in_sema) : canc(in_canc)
-            {
-                canc.sema = in_sema;
-            }
+		public:
+			scoped_canceler(const canceler &in_canc, semaphore *in_sema) : canc(in_canc)
+			{
+				canc.sema = in_sema;
+			}
 
-            ~scoped_canceler()
-            {
-                canc.on_completed.broadcast();
-                canc.sema = nullptr;
-            }
-        };
+			~scoped_canceler()
+			{
+				canc.on_completed.broadcast();
+				canc.sema = nullptr;
+			}
+		};
 
-        canceler()
-        {
-        }
+		canceler()
+		{}
 
-        void cancel()
-        {
-            cancelled = true;
-            sema->m_cv.notify_all();
-        }
+		void cancel()
+		{
+			cancelled = true;
+			sema->m_cv.notify_all();
+		}
 
-        bool is_cancelled() const
-        {
-            return cancelled;
-        }
+		bool is_cancelled() const
+		{
+			return cancelled;
+		}
 
-        MulticastDelegate<std::function<void()>> on_completed;
-    };
+		MulticastDelegate<std::function<void()>> on_completed;
+	};
 
-    template <class Rep, class Period>
-    bool cancellable_acquire_for(std::chrono::duration<Rep, Period> dur, const canceler &canc = {})
-    {
-        std::unique_lock lk{m_lock};
+	template <class Rep, class Period> bool cancellable_acquire_for(std::chrono::duration<Rep, Period> dur, const canceler &canc = {})
+	{
+		std::unique_lock lk{m_lock};
 
-        canceler::scoped_canceler scoped(canc, this);
+		canceler::scoped_canceler scoped(canc, this);
 
-        if (canc.is_cancelled())
-        {
-            return false;
-        }
+		if (canc.is_cancelled())
+		{
+			return false;
+		}
 
-        if (m_cv.wait_for(lk, dur, [&]() {
-                if (canc.is_cancelled())
-                {
-                    return true;
-                }
-                return m_ct != 0;
-            }))
-        {
-            if (canc.is_cancelled())
-            {
-                return false;
-            }
+		if (m_cv.wait_for(lk, dur, [&]() {
+				if (canc.is_cancelled())
+				{
+					return true;
+				}
+				return m_ct != 0;
+			}))
+		{
+			if (canc.is_cancelled())
+			{
+				return false;
+			}
 
-            m_ct--;
-            return true;
-        }
-        return false;
-    }
+			m_ct--;
+			return true;
+		}
+		return false;
+	}
 
-    template <class Rep, class Period, class LockGuardClass>
-    bool cancellable_acquire_for(std::chrono::duration<Rep, Period> dur, LockGuardClass &guard,
-                                 const canceler &canc = {})
-    {
-        std::unique_lock lk{m_lock};
+	template <class Rep, class Period, class LockGuardClass>
+	bool cancellable_acquire_for(std::chrono::duration<Rep, Period> dur, LockGuardClass &guard, const canceler &canc = {})
+	{
+		std::unique_lock lk{m_lock};
 
-        guard.unlock();
+		guard.unlock();
 
-        canceler::scoped_canceler scoped(canc, this);
+		canceler::scoped_canceler scoped(canc, this);
 
-        if (canc.is_cancelled())
-        {
-            return false;
-        }
+		if (canc.is_cancelled())
+		{
+			return false;
+		}
 
-        if (m_cv.wait_for(lk, dur, [&]() {
-                if (canc.is_cancelled())
-                {
-                    return true;
-                }
-                return m_ct != 0;
-            }))
-        {
-            if (canc.is_cancelled())
-            {
-                return false;
-            }
+		if (m_cv.wait_for(lk, dur, [&]() {
+				if (canc.is_cancelled())
+				{
+					return true;
+				}
+				return m_ct != 0;
+			}))
+		{
+			if (canc.is_cancelled())
+			{
+				return false;
+			}
 
-            m_ct--;
-            return true;
-        }
-        return false;
-    }
+			m_ct--;
+			return true;
+		}
+		return false;
+	}
 
-    bool try_acquire()
-    {
-        std::unique_lock lk{m_lock};
-        if (m_ct)
-        {
-            m_ct--;
-            return true;
-        }
-        return false;
-    }
+	bool try_acquire()
+	{
+		std::unique_lock lk{m_lock};
+		if (m_ct)
+		{
+			m_ct--;
+			return true;
+		}
+		return false;
+	}
 
-    void release()
-    {
-        std::unique_lock lk{m_lock};
-        m_ct++;
-        m_cv.notify_one();
-    }
+	void release()
+	{
+		std::unique_lock lk{m_lock};
+		m_ct++;
+		m_cv.notify_one();
+	}
 
-  protected:
-    std::mutex m_lock;
-    std::condition_variable m_cv;
-    uintptr_t m_ct = 0;
+protected:
+	std::mutex m_lock;
+	std::condition_variable m_cv;
+	uintptr_t m_ct = 0;
 };
 
 template <class T> class semaphore_guard
 {
-  public:
-    semaphore_guard(T &sema) : m_sema(sema)
-    {
-        m_sema.acquire();
-    }
-    semaphore_guard(const T &) = delete;
-    virtual ~semaphore_guard()
-    {
-        m_sema.release();
-    }
+public:
+	semaphore_guard(T &sema) : m_sema(sema)
+	{
+		m_sema.acquire();
+	}
+	semaphore_guard(const T &) = delete;
+	virtual ~semaphore_guard()
+	{
+		m_sema.release();
+	}
 
-  private:
-    T &m_sema;
+private:
+	T &m_sema;
 };
 
 #endif
