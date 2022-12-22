@@ -173,8 +173,10 @@ DEFINE_VITA_IMP_NID_EXPORT(CAE9ACE6, C5C11EE7)
 
 	size_t succ_counter = 0;
 	auto thread = ctx->coord.thread_create();
-	for (auto &la : ctx->load.thread_init_routines)
+	for (auto &item : ctx->load.thread_init_routines)
 	{
+		auto la = item.first;
+
 		(*thread)[RegisterAccessProxy::Register::SP]->w(sp);
 		(*thread)[RegisterAccessProxy::Register::LR]->w(lr);
 
@@ -252,7 +254,8 @@ DEFINE_VITA_IMP_NID_EXPORT(859A24B1, 1BBDE3D9)
 		size_t succ_counter = 0;
 		for (auto it = ctx->load.thread_fini_routines.rbegin(); it != ctx->load.thread_fini_routines.rend(); it++)
 		{
-			auto &la = *it;
+			auto &item = *it;
+			auto la = item.first;
 			(*thread)[RegisterAccessProxy::Register::SP]->w(sp);
 			(*thread)[RegisterAccessProxy::Register::LR]->w(lr);
 
@@ -298,3 +301,36 @@ DEFINE_VITA_IMP_NID_EXPORT(859A24B1, 4B675D05)
 }
 
 VITA_IMP_NID_FORWARD_SYM(CAE9ACE6, FA26BC62, "printf")
+
+#undef psp2cldr_test_vfp
+DEFINE_VITA_IMP_SYM_EXPORT(psp2cldr_test_vfp)
+{
+	DECLARE_VITA_IMP_TYPE(FUNCTION);
+	// double psp2cldr_test_vfp(float a, double b, float c, double d, int e, int f) -> (a*b/c*d/e*f);
+	// VFP and NEON register use, see DEN0013D 15.1.1
+
+	uint32_t S0 = ctx->thread[RegisterAccessProxy::Register::S0]->r_S();
+	uint32_t S1 = ctx->thread[RegisterAccessProxy::Register::S1]->r_S();
+	uint64_t D1 = ctx->thread[RegisterAccessProxy::Register::D1]->r_D();
+	uint64_t D2 = ctx->thread[RegisterAccessProxy::Register::D2]->r_D();
+	float a = reinterpret_cast<float &>(S0);
+	double b = reinterpret_cast<double &>(D1);
+	float c = reinterpret_cast<float &>(S1);
+	double d = reinterpret_cast<double &>(D2);
+
+	int32_t e = PARAM_0;
+	int32_t f = PARAM_1;
+
+	std::cout << "a=" << a << std::endl;
+	std::cout << "b=" << b << std::endl;
+	std::cout << "c=" << c << std::endl;
+	std::cout << "d=" << d << std::endl;
+	std::cout << "e=" << e << std::endl;
+	std::cout << "f=" << f << std::endl;
+
+	double out = e * f / a * b / c * d;
+	std::cout << "out=" << out << std::endl;
+	ctx->thread[RegisterAccessProxy::Register::D0]->w_D(reinterpret_cast<uint64_t &>(out));
+	TARGET_RETURN(0);
+	HANDLER_RETURN(0);
+}
