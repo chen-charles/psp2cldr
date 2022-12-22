@@ -24,5 +24,4 @@ static void __attribute__((constructor)) startup()
 }
 
 static void __attribute__((destructor)) shutdown()
-{
-}
+{}
