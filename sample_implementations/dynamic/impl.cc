@@ -85,7 +85,7 @@ DEFINE_VITA_IMP_SYM_EXPORT(_write)
 	uint32_t ptr = PARAM_1;
 	uint32_t len = PARAM_2;
 
-	char buf[len + 1];
+	char *buf = new char[len + 1];
 	memset(buf, 0, len + 1);
 	ctx->coord.proxy().copy_out(buf, ptr, len);
 
@@ -105,6 +105,8 @@ DEFINE_VITA_IMP_SYM_EXPORT(_write)
 		throw;
 	}
 	std::cout << buf;
+
+	delete[] buf;
 
 	TARGET_RETURN(len);
 	HANDLER_RETURN(0);
