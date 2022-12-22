@@ -20,7 +20,7 @@
 
 static inline NIDHASH_t nid_hash(NID_t libraryNID, NID_t functionNID)
 {
-    return ((NIDHASH_t)libraryNID << 32) | functionNID;
+	return ((NIDHASH_t)libraryNID << 32) | functionNID;
 }
 
 #define STRINGIZE_IMPL(x) #x

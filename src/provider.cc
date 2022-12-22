@@ -19,32 +19,32 @@
 
 void *Provider_DynamicallyLinkedLibrary::get_impl(const std::string &name) const
 {
-    if (m_handle)
-    {
+	if (m_handle)
+	{
 #ifdef _WIN32
-        return (void *)GetProcAddress((HMODULE)m_handle, name.c_str());
+		return (void *)GetProcAddress((HMODULE)m_handle, name.c_str());
 #else
-        return (void *)dlsym(m_handle, name.c_str());
+		return (void *)dlsym(m_handle, name.c_str());
 #endif
-    }
-    return NULL;
+	}
+	return NULL;
 }
 
 Provider_DynamicallyLinkedLibrary::Provider_DynamicallyLinkedLibrary(const std::string &name)
 {
 #ifdef _WIN32
-    if (name.empty())
-        m_handle = GetModuleHandle(NULL);
-    else
-        m_handle = LoadLibrary(name.c_str());
+	if (name.empty())
+		m_handle = GetModuleHandle(NULL);
+	else
+		m_handle = LoadLibrary(name.c_str());
 
-    if (!m_handle)
-        LOG(WARN, "LoadLibrary failed");
+	if (!m_handle)
+		LOG(WARN, "LoadLibrary failed");
 #else
-    if (name.empty())
-        m_handle = dlopen(NULL, RTLD_NOW | RTLD_NOLOAD);
-    else
-        m_handle = dlopen(name.c_str(), RTLD_LAZY | RTLD_LOCAL);
+	if (name.empty())
+		m_handle = dlopen(NULL, RTLD_NOW | RTLD_NOLOAD);
+	else
+		m_handle = dlopen(name.c_str(), RTLD_LAZY | RTLD_LOCAL);
 #if 0
     {
         // all providers will be loaded into a new LM
@@ -72,20 +72,20 @@ Provider_DynamicallyLinkedLibrary::Provider_DynamicallyLinkedLibrary(const std::
     }
 #endif
 
-    if (!m_handle)
-        LOG(WARN, "dl(m)open failed: {}", dlerror());
+	if (!m_handle)
+		LOG(WARN, "dl(m)open failed: {}", dlerror());
 #endif
 }
 
 Provider_DynamicallyLinkedLibrary::~Provider_DynamicallyLinkedLibrary()
 {
-    if (m_handle)
-    {
+	if (m_handle)
+	{
 #ifdef _WIN32
-        FreeLibrary((HMODULE)m_handle);
+		FreeLibrary((HMODULE)m_handle);
 #else
-        dlclose(m_handle);
+		dlclose(m_handle);
 #endif
-        m_handle = nullptr;
-    }
+		m_handle = nullptr;
+	}
 }

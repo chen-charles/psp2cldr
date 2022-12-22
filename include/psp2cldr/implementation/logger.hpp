@@ -18,24 +18,24 @@
 
 class psp2cldr_logger_wrap
 {
-  public:
-    static std::shared_ptr<spdlog::logger> get_instance()
-    {
-        if (!m_logger.get())
-        {
-            m_logger = spdlog::stdout_color_mt("psp2cldr");
-            spdlog::set_level(spdlog::level::info);
+public:
+	static std::shared_ptr<spdlog::logger> get_instance()
+	{
+		if (!m_logger.get())
+		{
+			m_logger = spdlog::stdout_color_mt("psp2cldr");
+			spdlog::set_level(spdlog::level::info);
 #ifndef NDEBUG
-            m_logger->set_pattern("%Y-%m-%d %H:%M:%S.%e [%^%=9l%$] [%n %!@%s:%#] %v");
+			m_logger->set_pattern("%Y-%m-%d %H:%M:%S.%e [%^%=9l%$] [%n %!@%s:%#] %v");
 #else
-            m_logger->set_pattern("%Y-%m-%d %H:%M:%S.%e [%^%4!l%$] [%n %!@%s:%#] %v");
+			m_logger->set_pattern("%Y-%m-%d %H:%M:%S.%e [%^%4!l%$] [%n %!@%s:%#] %v");
 #endif
-        }
-        return m_logger;
-    }
+		}
+		return m_logger;
+	}
 
-  private:
-    static inline std::shared_ptr<spdlog::logger> m_logger;
+private:
+	static inline std::shared_ptr<spdlog::logger> m_logger;
 };
 
 #ifndef LOG
@@ -46,19 +46,19 @@ class psp2cldr_logger_wrap
 
 class psp2cldr_panic_logger_wrap
 {
-  public:
-    static std::shared_ptr<spdlog::logger> get_instance()
-    {
-        if (!m_logger.get())
-        {
-            m_logger = spdlog::stderr_color_mt("psp2cldr panic");
-            m_logger->set_pattern("PANIC > %v");
-        }
-        return m_logger;
-    }
+public:
+	static std::shared_ptr<spdlog::logger> get_instance()
+	{
+		if (!m_logger.get())
+		{
+			m_logger = spdlog::stderr_color_mt("psp2cldr panic");
+			m_logger->set_pattern("PANIC > %v");
+		}
+		return m_logger;
+	}
 
-  private:
-    static inline std::shared_ptr<spdlog::logger> m_logger;
+private:
+	static inline std::shared_ptr<spdlog::logger> m_logger;
 };
 
 #ifndef PANIC_LOG

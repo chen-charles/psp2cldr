@@ -26,7 +26,6 @@
 #error Coordinator Implementation must define Coordinator_Impl
 #endif
 
-static_assert(std::is_convertible<Coordinator_Impl *, ExecutionCoordinator *>::value,
-              "Coordinator_Impl must be derived from ExecutionCoordinator");
+static_assert(std::is_convertible<Coordinator_Impl *, ExecutionCoordinator *>::value, "Coordinator_Impl must be derived from ExecutionCoordinator");
 
 #endif
