@@ -61,6 +61,36 @@ uint32_t RegisterAccessProxy_NativeMSVC::r() const
     return value;
 }
 
+Float128 RegisterAccessProxy_NativeMSVC::w_Q(Float128 value)
+{
+	return *(Float128 *)((char *)(&(m_engine->m_target_ctx)) + reg_mapping.at(name())) = value; // implementation specific
+}
+
+Float128 RegisterAccessProxy_NativeMSVC::r_Q() const
+{
+	return *(Float128 *)((char *)(&(m_engine->m_target_ctx)) + reg_mapping.at(name()));
+}
+
+uint64_t RegisterAccessProxy_NativeMSVC::w_D(uint64_t value)
+{
+	return *(uint64_t *)((char *)(&(m_engine->m_target_ctx)) + reg_mapping.at(name())) = value; // implementation specific
+}
+
+uint64_t RegisterAccessProxy_NativeMSVC::r_D() const
+{
+	return *(uint64_t *)((char *)(&(m_engine->m_target_ctx)) + reg_mapping.at(name()));
+}
+
+uint32_t RegisterAccessProxy_NativeMSVC::w_S(uint32_t value)
+{
+	return *(uint32_t *)((char *)(&(m_engine->m_target_ctx)) + reg_mapping.at(name())) = value; // implementation specific
+}
+
+uint32_t RegisterAccessProxy_NativeMSVC::r_S() const
+{
+	return *(uint32_t *)((char *)(&(m_engine->m_target_ctx)) + reg_mapping.at(name()));
+}
+
 thread_local ExecutionThread_NativeMSVC* tls_thread = nullptr;
 thread_local ExecutionThread_NativeMSVC* tls_thread_init = nullptr;
 thread_local ExecutionThread_NativeMSVC* tls_thread_return = nullptr;
