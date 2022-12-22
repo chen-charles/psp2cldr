@@ -9,7 +9,7 @@ jobs:
   native:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
 
     - name: Check Updates
       run: sudo apt update
@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     container: vitasdk/vitasdk
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
 
     - name: Check Updates
       run: apk update
@@ -59,8 +59,8 @@ jobs:
   style:
     runs-on: ubuntu-latest
     steps:
-
     - uses: actions/checkout@v3
+
     - uses: jidicula/clang-format-action@v4.9.0
       with:
         clang-format-version: '13'
