@@ -271,6 +271,12 @@ public:
 		return handler_call_target_function_unpack(0, name, args...);
 	}
 
+	template <typename... Targs>
+	std::shared_ptr<HandlerContinuation> handler_call_target_function_raw(uint32_t address, Targs &&...args)
+	{
+		return handler_call_target_function_raw_unpack(0, address, args...);
+	}
+
 public:
 	ExecutionCoordinator &coord;
 	ExecutionThread &thread;
@@ -286,6 +292,7 @@ public:
 protected:
 	virtual std::shared_ptr<HandlerContinuation> handler_call_target_function_impl(int n_params, NIDHASH_t nid_hash);
 	virtual std::shared_ptr<HandlerContinuation> handler_call_target_function_impl(int n_params, std::string name);
+	virtual std::shared_ptr<HandlerContinuation> handler_call_target_function_raw_impl(int n_params, uint32_t address);
 
 protected:
 	virtual void set_function_call_parameter(int idx, uint32_t value);
@@ -326,6 +333,25 @@ protected:
 	{
 		set_function_call_parameter(idx, value);
 		return handler_call_target_function_unpack(idx + 1, name, args...);
+	}
+
+	std::shared_ptr<HandlerContinuation> handler_call_target_function_raw_unpack(int idx, uint32_t address)
+	{
+		return handler_call_target_function_raw_impl(idx, address);
+	}
+
+	template <typename T>
+	std::shared_ptr<HandlerContinuation> handler_call_target_function_raw_unpack(int idx, uint32_t address, T value)
+	{
+		set_function_call_parameter(idx, value);
+		return handler_call_target_function_raw_unpack(idx + 1, address);
+	}
+
+	template <typename T, typename... Targs>
+	std::shared_ptr<HandlerContinuation> handler_call_target_function_raw_unpack(int idx, uint32_t address, T value, Targs &&...args)
+	{
+		set_function_call_parameter(idx, value);
+		return handler_call_target_function_raw_unpack(idx + 1, address, args...);
 	}
 };
 

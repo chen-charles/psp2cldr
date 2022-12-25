@@ -103,6 +103,13 @@ std::shared_ptr<HandlerContinuation> InterruptContext::handler_call_target_funct
 	return _handler_call_target_function_impl(n_params, load.libs_export_locations[name].second, this, name);
 }
 
+std::shared_ptr<HandlerContinuation> InterruptContext::handler_call_target_function_raw_impl(int n_params, uint32_t address)
+{
+	if (address == 0)
+		throw std::logic_error("attempted to call nullptr");
+	return _handler_call_target_function_impl(n_params, address, this, "raw");
+}
+
 void InterruptContext::set_function_call_parameter(int idx, uint32_t value)
 {
 	switch (idx)
