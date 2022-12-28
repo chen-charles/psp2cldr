@@ -61,7 +61,7 @@ static std::shared_ptr<ExecutionThread> init_main_thread(LoadContext &ctx, Execu
 					LOG(TRACE, "handler({}) exit: {} LR={:#010x}", thread.tid(), entry.repr(), thread[RegisterAccessProxy::Register::LR]->r());
 					if (const std::exception *handler_excp = handler_result->exception())
 					{
-						if (const HandlerExceptionBaseException *base_excp = dynamic_cast<const HandlerExceptionBaseException*>(handler_excp))
+						if (const HandlerExceptionBaseException *base_excp = dynamic_cast<const HandlerExceptionBaseException *>(handler_excp))
 						{
 							if (const bool may_continue = base_excp->cleanup(&intr_ctx))
 							{
