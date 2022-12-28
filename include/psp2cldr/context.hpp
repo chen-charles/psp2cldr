@@ -41,6 +41,12 @@ protected:
 	uint32_t m_result;
 };
 
+class HandlerExceptionBaseException : public std::exception
+{
+public:
+	virtual bool cleanup(InterruptContext *ctx) const = 0;
+};
+
 template <class ExceptionType, typename = typename std::enable_if<std::is_base_of<std::exception, ExceptionType>::value>::type>
 class HandlerException : public HandlerResult
 {
