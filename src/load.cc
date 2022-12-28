@@ -44,28 +44,27 @@ static std::shared_ptr<ExecutionThread> init_main_thread(LoadContext &ctx, Execu
 			if (intno == POSIX_SIGILL)
 			{
 				bool entry_exists = false;
-				import_stub_entry entry;
 				{
 					std::shared_lock guard(ctx.unimplemented_targets_mutex);
 					if (ctx.unimplemented_targets.count(pc) != 0)
 					{
 						entry_exists = true;
-						entry = ctx.unimplemented_targets.at(pc);
+						intr_ctx.entry = ctx.unimplemented_targets.at(pc);
 					}
 				}
 
 				if (entry_exists)
 				{
-					LOG(TRACE, "handler({}): {} LR={:#010x}", thread.tid(), entry.repr(), thread[RegisterAccessProxy::Register::LR]->r());
-					auto handler_result = entry.call(&intr_ctx);
-					LOG(TRACE, "handler({}) exit: {} LR={:#010x}", thread.tid(), entry.repr(), thread[RegisterAccessProxy::Register::LR]->r());
+					LOG(TRACE, "handler({}): {} LR={:#010x}", thread.tid(), intr_ctx.entry.repr(), thread[RegisterAccessProxy::Register::LR]->r());
+					auto handler_result = intr_ctx.entry.call(&intr_ctx);
+					LOG(TRACE, "handler({}) exit: {} LR={:#010x}", thread.tid(), intr_ctx.entry.repr(), thread[RegisterAccessProxy::Register::LR]->r());
 					if (const std::exception *handler_excp = handler_result->exception())
 					{
 						if (const HandlerExceptionBaseException *base_excp = dynamic_cast<const HandlerExceptionBaseException *>(handler_excp))
 						{
 							if (const bool may_continue = base_excp->cleanup(&intr_ctx))
 							{
-								LOG(TRACE, "handler {} returned exception {}, cleanup accepted, continue", entry.repr(), base_excp->what());
+								LOG(TRACE, "handler {} returned exception {}, cleanup accepted, continue", intr_ctx.entry.repr(), base_excp->what());
 								return;
 							}
 						}
@@ -76,7 +75,7 @@ static std::shared_ptr<ExecutionThread> init_main_thread(LoadContext &ctx, Execu
 						return;
 					else
 					{
-						LOG(CRITICAL, "handler {} returned {:#010x} != 0, die ...", entry.repr(), handler_result->result());
+						LOG(CRITICAL, "handler {} returned {:#010x} != 0, die ...", intr_ctx.entry.repr(), handler_result->result());
 						intr_ctx.panic(1);
 					}
 				}
