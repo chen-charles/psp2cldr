@@ -148,27 +148,28 @@ static inline std::string u32_str_repr(uint32_t val) // {:#010x}
 
 class import_stub_entry
 {
+	enum class type_t : uint8_t
+	{
+		NONE = 0,
+		NID,
+		SYM,
+	};
+
 public:
-	import_stub_entry()
-	{
-		type = 0;
-	}
-	import_stub_entry(const nid_stub &stub) : nid(stub)
-	{
-		type = 1;
-	}
-	import_stub_entry(const sym_stub &stub) : sym(stub)
-	{
-		type = 2;
-	}
+	import_stub_entry() = default;
+	import_stub_entry(const nid_stub &stub) : type(type_t::NID), nid(stub)
+	{}
+
+	import_stub_entry(const sym_stub &stub) : type(type_t::SYM), sym(stub)
+	{}
 
 	std::shared_ptr<HandlerResult> call(InterruptContext *ctx)
 	{
 		switch (type)
 		{
-		case 1:
+		case type_t::NID:
 			return nid.func(nid.libraryNID, nid.functionNID, ctx);
-		case 2:
+		case type_t::SYM:
 			return sym.func(sym.name, sym.sym, ctx);
 		default:
 			throw;
@@ -179,9 +180,9 @@ public:
 	{
 		switch (type)
 		{
-		case 1:
+		case type_t::NID:
 			return "nid library=" + u32_str_repr(nid.libraryNID) + " function=" + u32_str_repr(nid.functionNID);
-		case 2:
+		case type_t::SYM:
 			return "symbol \"" + sym.name + "\"";
 		default:
 			return "invalid";
@@ -192,7 +193,7 @@ public:
 	{}
 
 public:
-	int type;
+	type_t type = type_t::NONE;
 	nid_stub nid;
 	sym_stub sym;
 };
@@ -293,6 +294,7 @@ public:
 	ExecutionCoordinator &coord;
 	ExecutionThread &thread;
 	LoadContext &load;
+	import_stub_entry entry;
 
 	static std::recursive_mutex GLOBAL_PANIC_LOCK;
 
