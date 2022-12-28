@@ -87,20 +87,11 @@ static std::shared_ptr<HandlerContinuation> _handler_call_target_function_impl(i
 	return out;
 }
 
-std::shared_ptr<HandlerContinuation> InterruptContext::handler_call_target_function_impl(int n_params, NIDHASH_t nid_hash)
+std::shared_ptr<HandlerContinuation> InterruptContext::handler_call_target_function_raw_impl(std::string name, int n_params, uint32_t address)
 {
-	if (load.nids_export_locations.count(nid_hash) == 0)
-		throw std::logic_error("attempted to call an unregistered target function");
-	if (load.nids_export_locations[nid_hash].first)
-		throw std::logic_error("attempted to call a variable");
-	return _handler_call_target_function_impl(n_params, load.nids_export_locations[nid_hash].second, this, std::to_string(nid_hash));
-}
-
-std::shared_ptr<HandlerContinuation> InterruptContext::handler_call_target_function_impl(int n_params, std::string name)
-{
-	if (load.libs_export_locations.count(name) == 0)
-		throw std::logic_error("attempted to call an unregistered target function");
-	return _handler_call_target_function_impl(n_params, load.libs_export_locations[name].second, this, name);
+	if (address == 0)
+		throw std::logic_error("attempted to call nullptr");
+	return _handler_call_target_function_impl(n_params, address, this, name);
 }
 
 void InterruptContext::set_function_call_parameter(int idx, uint32_t value)

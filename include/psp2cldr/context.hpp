@@ -41,6 +41,12 @@ protected:
 	uint32_t m_result;
 };
 
+class HandlerExceptionBaseException : public std::exception
+{
+public:
+	virtual bool cleanup(InterruptContext *ctx) const = 0;
+};
+
 template <class ExceptionType, typename = typename std::enable_if<std::is_base_of<std::exception, ExceptionType>::value>::type>
 class HandlerException : public HandlerResult
 {
@@ -262,13 +268,25 @@ public:
 	template <typename... Targs>
 	std::shared_ptr<HandlerContinuation> handler_call_target_function(NIDHASH_t nid_hash, Targs &&...args)
 	{
-		return handler_call_target_function_unpack(0, nid_hash, args...);
+		if (load.nids_export_locations.count(nid_hash) == 0)
+			throw std::logic_error("attempted to call an unregistered target function");
+		if (load.nids_export_locations[nid_hash].first)
+			throw std::logic_error("attempted to call a variable");
+		return handler_call_target_function_raw_unpack(std::to_string(nid_hash), 0, load.nids_export_locations[nid_hash].second, args...);
 	}
 
 	template <typename... Targs>
 	std::shared_ptr<HandlerContinuation> handler_call_target_function(std::string name, Targs &&...args)
 	{
-		return handler_call_target_function_unpack(0, name, args...);
+		if (load.libs_export_locations.count(name) == 0)
+			throw std::logic_error("attempted to call an unregistered target function");
+		return handler_call_target_function_raw_unpack(name, 0, load.libs_export_locations[name].second, args...);
+	}
+
+	template <typename... Targs>
+	std::shared_ptr<HandlerContinuation> handler_call_target_function_raw(uint32_t address, Targs &&...args)
+	{
+		return handler_call_target_function_raw_unpack("raw", 0, address, args...);
 	}
 
 public:
@@ -284,48 +302,28 @@ public:
 	virtual void panic(int code = 0, const char *msg = nullptr);
 
 protected:
-	virtual std::shared_ptr<HandlerContinuation> handler_call_target_function_impl(int n_params, NIDHASH_t nid_hash);
-	virtual std::shared_ptr<HandlerContinuation> handler_call_target_function_impl(int n_params, std::string name);
+	virtual std::shared_ptr<HandlerContinuation> handler_call_target_function_raw_impl(std::string name, int n_params, uint32_t address);
 
 protected:
 	virtual void set_function_call_parameter(int idx, uint32_t value);
 
-	std::shared_ptr<HandlerContinuation> handler_call_target_function_unpack(int idx, NIDHASH_t nid_hash)
+	std::shared_ptr<HandlerContinuation> handler_call_target_function_raw_unpack(std::string name, int idx, uint32_t address)
 	{
-		return handler_call_target_function_impl(idx, nid_hash);
+		return handler_call_target_function_raw_impl(name, idx, address);
 	}
 
 	template <typename T>
-	std::shared_ptr<HandlerContinuation> handler_call_target_function_unpack(int idx, NIDHASH_t nid_hash, T value)
+	std::shared_ptr<HandlerContinuation> handler_call_target_function_raw_unpack(std::string name, int idx, uint32_t address, T value)
 	{
 		set_function_call_parameter(idx, value);
-		return handler_call_target_function_unpack(idx + 1, nid_hash);
+		return handler_call_target_function_raw_unpack(name, idx + 1, address);
 	}
 
 	template <typename T, typename... Targs>
-	std::shared_ptr<HandlerContinuation> handler_call_target_function_unpack(int idx, NIDHASH_t nid_hash, T value, Targs &&...args)
+	std::shared_ptr<HandlerContinuation> handler_call_target_function_raw_unpack(std::string name, int idx, uint32_t address, T value, Targs &&...args)
 	{
 		set_function_call_parameter(idx, value);
-		return handler_call_target_function_unpack(idx + 1, nid_hash, args...);
-	}
-
-	std::shared_ptr<HandlerContinuation> handler_call_target_function_unpack(int idx, std::string name)
-	{
-		return handler_call_target_function_impl(idx, name);
-	}
-
-	template <typename T>
-	std::shared_ptr<HandlerContinuation> handler_call_target_function_unpack(int idx, std::string name, T value)
-	{
-		set_function_call_parameter(idx, value);
-		return handler_call_target_function_unpack(idx + 1, name);
-	}
-
-	template <typename T, typename... Targs>
-	std::shared_ptr<HandlerContinuation> handler_call_target_function_unpack(int idx, std::string name, T value, Targs &&...args)
-	{
-		set_function_call_parameter(idx, value);
-		return handler_call_target_function_unpack(idx + 1, name, args...);
+		return handler_call_target_function_raw_unpack(name, idx + 1, address, args...);
 	}
 };
 
